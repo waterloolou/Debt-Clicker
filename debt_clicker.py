@@ -186,6 +186,17 @@ class DebtClicker:
         self.current_category = "All"
         self.stock_labels = {}
 
+        # Event state flags
+        self.epstein      = False
+        self.subscription = False
+        self.revolution   = True
+        self.pet          = True
+        self.mansion      = True
+        self.family       = True
+        self.company      = True
+        self.rich_relative= True
+        self.space        = False
+
         self.market = StockMarket()
         self.market.money = self.money
 
@@ -252,6 +263,17 @@ class DebtClicker:
         self.days = 0
         self.running = True
         self.market.money = self.money
+
+        # Reset event flags
+        self.epstein       = False
+        self.subscription  = False
+        self.revolution    = True
+        self.pet           = True
+        self.mansion       = True
+        self.family        = True
+        self.company       = True
+        self.rich_relative = True
+        self.space         = False
 
         self.log_event("Your financial empire begins its slow decline...")
         self.log_event("Fetching live stock data for all markets...")
@@ -358,7 +380,19 @@ class DebtClicker:
     # -----------------------------
 
     def lose_money(self):
-        lost = random.randint(100, 1000000)
+        m = self.money
+        if m < 50:
+            lost = random.randint(1, 25)
+        elif m < 100:
+            lost = random.randint(10, 50)
+        elif m < 1000:
+            lost = random.randint(100, 500)
+        elif m < 10000:
+            lost = random.randint(100, 1000)
+        elif m < 100000:
+            lost = random.randint(1000, 10000)
+        else:
+            lost = random.randint(100, 10000000)
         self.money -= lost
         self.market.money = self.money
         self.log_event(f"Lost ${lost:,}")
@@ -369,14 +403,216 @@ class DebtClicker:
     # -----------------------------
 
     def random_events(self):
-        r = random.randint(1, 20)
-        if r == 1:
+        r = random.randint(1, 50)  # ~38% chance an event fires each day
+
+        if r == 1 and self.family:
+            self.family = False
             self.money /= 2
-            self.log_event("Divorce took half your fortune")
-        if r == 2:
+            self.show_event("Gold Digger!",
+                "Oh no! Your spouse is a gold-digger and has taken HALF your money!")
+
+        elif r == 2:
+            self.money *= 0.30
+            self.show_event("Tax Fraud!",
+                "You filed a fraudulent tax report. The IRS found out — lose 70% of your money!")
+
+        elif r == 3 and self.company:
+            self.money -= 50000
+            self.show_event("Factory Incident!",
+                "One of your child workers at your illegal factory got mutilated by machinery. Pay $50,000 to cover it up.")
+
+        elif r == 4 and self.rich_relative:
+            self.rich_relative = False
             self.money += 1000000
-            self.log_event("A rich relative left you money")
+            self.show_event("Inheritance!",
+                "Your Grandma died! She left you $1,000,000. RIP.")
+
+        elif r == 5:
+            for name in self.market.stocks:
+                self.market.stocks[name]["shares"] = 0
+            self.show_event("Betrayal!",
+                "Your financial advisor betrayed you and liquidated ALL of your stock shares!")
+
+        elif r == 6:
+            if random.randint(1, 5) == 1:
+                self.money += 100000
+                self.show_event("Lucky Hacker!",
+                    "Someone stole your credit ID and went gambling — and WON. They sent you $100,000 out of guilt.")
+            else:
+                self.money -= 500000
+                self.show_event("Identity Theft!",
+                    "Someone stole your credit ID and went gambling. You lost $500,000.")
+
+        elif r == 7 and not self.epstein:
+            self.epstein = True
+            self.money -= 10000000
+            self.show_event("Island Discovered...",
+                "Your ventures to Epstein's island have been discovered. Lose $10,000,000 to cover it up.")
+
+        elif r == 8:
+            self.money -= 5000000
+            self.show_event("JFK Investigation!",
+                "You are under investigation for the assassination of JFK. Your assets are temporarily frozen — lose $5,000,000.")
+
+        elif r == 9 and self.pet:
+            self.pet = False
+            self.money -= 1000
+            self.show_event("Pet Incident...",
+                "Your pet wandered into the oven. Your uneducated servant unknowingly turned it on. Something smells burnt... (pet is gone)")
+
+        elif r == 10:
+            self.money += 2000000
+            self.show_event("Diamond in the Rough!",
+                "You accidentally put a pencil in a pressure cooker and it turned into a diamond! A diamond also went missing from the Louvre... +$2,000,000")
+
+        elif r == 11 and self.family:
+            self.money -= 1000000
+            self.show_event("Blender Incident!",
+                "Your child accidentally stuck their entire arm into a running blender. Pay $1,000,000 in healthcare bills.")
+
+        elif r == 12 and self.revolution:
+            self.show_revolution_event()
+            return
+
+        elif r == 13 and self.company:
+            self.company = False
+            self.money -= 1000000
+            self.show_event("Factory Shutdown!",
+                "All your foreign investments in underage factory workers are exposed. Workers freed — you pay $1,000,000 in damages.")
+
+        elif r == 14 and self.mansion:
+            self.mansion = False
+            self.show_event("Cuba Invades!",
+                "The island your private mansion sits on was just invaded by Cuba. You lost your mansion.")
+
+        elif r == 15 and not self.subscription:
+            self.subscription = True
+            self.show_event("NYT Subscription!",
+                "You accidentally subscribed to the New York Times. You now lose $1 every second. Cancel? They don't have a cancel button.")
+            self.subscription_tick()
+
+        elif r == 16:
+            self.money -= 10000000
+            self.show_event("Weapons Deal",
+                "You are funding a genocide. Pay $10,000,000 in weapons and supplies.")
+
+        elif r == 17 and not self.space:
+            self.space = True
+            self.money -= 500000000
+            self.show_event("Space Program Disaster!",
+                "You created a space program. On the first launch, the rocket explodes and kills everyone on board. Pay $500,000,000 in damages.")
+
+        elif r == 18:
+            self.money += 5000000
+            self.show_event("Political Endorsement!",
+                "You 'accidentally' did the salute of a hated Austrian politician in public. The president loved it and hired you into the government. +$5,000,000")
+
+        elif r == 19:
+            self.money -= 10000000
+            self.show_event("Lawsuit Fail!",
+                "You sued a local news outlet for talking badly about you — but forgot about free speech. Lose $10,000,000.")
+
         self.market.money = self.money
+
+    # -----------------------------
+    # EVENT POPUP
+    # -----------------------------
+
+    def show_event(self, title, text):
+        popup = tk.Toplevel(self.root)
+        popup.title(title)
+        popup.configure(bg="#0e1117")
+        popup.geometry("420x210")
+        popup.grab_set()
+        popup.resizable(False, False)
+
+        tk.Label(
+            popup, text=title,
+            font=("Arial", 13, "bold"), bg="#0e1117", fg="#ff4444"
+        ).pack(pady=(18, 6))
+
+        tk.Label(
+            popup, text=text,
+            font=("Arial", 10), bg="#0e1117", fg="white",
+            wraplength=380, justify="center"
+        ).pack(pady=6, padx=20)
+
+        tk.Button(
+            popup, text="OK",
+            bg="#1e2130", fg="#00ff90", relief="flat",
+            font=("Arial", 10), padx=24, pady=4,
+            command=popup.destroy
+        ).pack(pady=12)
+
+        self.update_status()
+
+    # -----------------------------
+    # REVOLUTION EVENT (accept / decline)
+    # -----------------------------
+
+    def show_revolution_event(self):
+        popup = tk.Toplevel(self.root)
+        popup.title("Socialist Revolution!")
+        popup.configure(bg="#0e1117")
+        popup.geometry("420x230")
+        popup.grab_set()
+        popup.resizable(False, False)
+
+        tk.Label(
+            popup, text="Socialist Revolution!",
+            font=("Arial", 13, "bold"), bg="#0e1117", fg="#ff4444"
+        ).pack(pady=(18, 6))
+
+        tk.Label(
+            popup,
+            text="While you were on vacation a socialist revolution erupted.\nYou are forced to split your money with the people.\nAccept, or face the consequences...",
+            font=("Arial", 10), bg="#0e1117", fg="white",
+            wraplength=380, justify="center"
+        ).pack(pady=6, padx=20)
+
+        btn_frame = tk.Frame(popup, bg="#0e1117")
+        btn_frame.pack(pady=12)
+
+        def accept():
+            self.revolution = False
+            self.money = 10000
+            self.market.money = self.money
+            self.update_status()
+            self.log_event("You accepted the revolution. Money reduced to $10,000.")
+            popup.destroy()
+
+        def decline():
+            self.revolution = False
+            self.running = False
+            self.log_event("You refused the revolution. They came for you...")
+            popup.destroy()
+            self.show_event("Game Over", "You refused the revolution. The people came for you. Nobody attended your funeral.")
+
+        tk.Button(
+            btn_frame, text="Accept",
+            bg="#1e2130", fg="#00ff90", relief="flat",
+            font=("Arial", 10), padx=18, pady=4,
+            command=accept
+        ).pack(side="left", padx=12)
+
+        tk.Button(
+            btn_frame, text="Decline (Risk Death)",
+            bg="#1e2130", fg="#ff4444", relief="flat",
+            font=("Arial", 10), padx=18, pady=4,
+            command=decline
+        ).pack(side="left", padx=12)
+
+    # -----------------------------
+    # NYT SUBSCRIPTION TICK
+    # -----------------------------
+
+    def subscription_tick(self):
+        if not self.subscription or not self.running:
+            return
+        self.money -= 1
+        self.market.money = self.money
+        self.update_status()
+        self.root.after(1000, self.subscription_tick)
 
     # -----------------------------
     # WORK
