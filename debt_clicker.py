@@ -197,6 +197,9 @@ class DebtClicker:
         self.rich_relative= True
         self.space        = False
 
+        # Active market effects: list of {"categories": [...], "multiplier": float, "days_left": int, "label": str}
+        self.market_effects = []
+
         self.market = StockMarket()
         self.market.money = self.money
 
@@ -274,6 +277,7 @@ class DebtClicker:
         self.company       = True
         self.rich_relative = True
         self.space         = False
+        self.market_effects = []
 
         self.log_event("Your financial empire begins its slow decline...")
         self.log_event("Fetching live stock data for all markets...")
@@ -410,16 +414,19 @@ class DebtClicker:
             self.money /= 2
             self.show_event("Gold Digger!",
                 "Oh no! Your spouse is a gold-digger and has taken HALF your money!")
+            self.apply_market_effect(["Finance"], 0.93, 3, "Divorce scandal")
 
         elif r == 2:
             self.money *= 0.30
             self.show_event("Tax Fraud!",
                 "You filed a fraudulent tax report. The IRS found out — lose 70% of your money!")
+            self.apply_market_effect(["Finance"], 0.91, 2, "Tax fraud scandal")
 
         elif r == 3 and self.company:
             self.money -= 50000
             self.show_event("Factory Incident!",
                 "One of your child workers at your illegal factory got mutilated by machinery. Pay $50,000 to cover it up.")
+            self.apply_market_effect(["Retail", "Automotive"], 0.94, 2, "Factory scandal")
 
         elif r == 4 and self.rich_relative:
             self.rich_relative = False
@@ -432,6 +439,7 @@ class DebtClicker:
                 self.market.stocks[name]["shares"] = 0
             self.show_event("Betrayal!",
                 "Your financial advisor betrayed you and liquidated ALL of your stock shares!")
+            self.apply_market_effect(["Finance"], 0.92, 3, "Advisor betrayal")
 
         elif r == 6:
             if random.randint(1, 5) == 1:
@@ -442,17 +450,20 @@ class DebtClicker:
                 self.money -= 500000
                 self.show_event("Identity Theft!",
                     "Someone stole your credit ID and went gambling. You lost $500,000.")
+            self.apply_market_effect(["Finance", "Technology"], 0.94, 2, "Identity theft")
 
         elif r == 7 and not self.epstein:
             self.epstein = True
             self.money -= 10000000
             self.show_event("Island Discovered...",
                 "Your ventures to Epstein's island have been discovered. Lose $10,000,000 to cover it up.")
+            self.apply_market_effect(["Entertainment", "Finance"], 0.88, 4, "Epstein scandal")
 
         elif r == 8:
             self.money -= 5000000
             self.show_event("JFK Investigation!",
                 "You are under investigation for the assassination of JFK. Your assets are temporarily frozen — lose $5,000,000.")
+            self.apply_market_effect(["Defense"], 0.91, 3, "Government investigation")
 
         elif r == 9 and self.pet:
             self.pet = False
@@ -469,8 +480,10 @@ class DebtClicker:
             self.money -= 1000000
             self.show_event("Blender Incident!",
                 "Your child accidentally stuck their entire arm into a running blender. Pay $1,000,000 in healthcare bills.")
+            self.apply_market_effect(["Healthcare"], 1.04, 2, "Medical lawsuit windfall")
 
         elif r == 12 and self.revolution:
+            self.apply_market_effect(["ALL"], 0.85, 5, "Socialist revolution")
             self.show_revolution_event()
             return
 
@@ -479,38 +492,48 @@ class DebtClicker:
             self.money -= 1000000
             self.show_event("Factory Shutdown!",
                 "All your foreign investments in underage factory workers are exposed. Workers freed — you pay $1,000,000 in damages.")
+            self.apply_market_effect(["Retail", "Automotive"], 0.92, 3, "Factory shutdown")
 
         elif r == 14 and self.mansion:
             self.mansion = False
             self.show_event("Cuba Invades!",
                 "The island your private mansion sits on was just invaded by Cuba. You lost your mansion.")
+            self.apply_market_effect(["Defense"], 1.06, 3, "Geopolitical tension")
+            self.apply_market_effect(["Space"], 0.93, 2, "Airspace conflict")
 
         elif r == 15 and not self.subscription:
             self.subscription = True
             self.show_event("NYT Subscription!",
                 "You accidentally subscribed to the New York Times. You now lose $1 every second. Cancel? They don't have a cancel button.")
+            self.apply_market_effect(["Entertainment"], 0.96, 1, "Media disruption")
             self.subscription_tick()
 
         elif r == 16:
             self.money -= 10000000
             self.show_event("Weapons Deal",
                 "You are funding a genocide. Pay $10,000,000 in weapons and supplies.")
+            self.apply_market_effect(["Defense"], 1.08, 3, "Weapons demand surge")
+            self.apply_market_effect(["Energy"], 0.91, 4, "War zone instability")
 
         elif r == 17 and not self.space:
             self.space = True
             self.money -= 500000000
             self.show_event("Space Program Disaster!",
                 "You created a space program. On the first launch, the rocket explodes and kills everyone on board. Pay $500,000,000 in damages.")
+            self.apply_market_effect(["Space"], 0.75, 5, "Space disaster")
+            self.apply_market_effect(["Technology", "Defense"], 0.93, 3, "Space sector contagion")
 
         elif r == 18:
             self.money += 5000000
             self.show_event("Political Endorsement!",
                 "You 'accidentally' did the salute of a hated Austrian politician in public. The president loved it and hired you into the government. +$5,000,000")
+            self.apply_market_effect(["Finance", "Defense"], 1.05, 2, "Government contracts")
 
         elif r == 19:
             self.money -= 10000000
             self.show_event("Lawsuit Fail!",
                 "You sued a local news outlet for talking badly about you — but forgot about free speech. Lose $10,000,000.")
+            self.apply_market_effect(["Entertainment"], 0.94, 2, "Media coverage backlash")
 
         self.market.money = self.money
 
@@ -603,6 +626,21 @@ class DebtClicker:
         ).pack(side="left", padx=12)
 
     # -----------------------------
+    # APPLY MARKET EFFECT HELPER
+    # -----------------------------
+
+    def apply_market_effect(self, categories, multiplier, days, label):
+        self.market_effects.append({
+            "categories": categories,
+            "multiplier": multiplier,
+            "days_left":  days,
+            "label":      label,
+        })
+        direction = "📈 boosting" if multiplier > 1 else "📉 crashing"
+        cats = ", ".join(categories) if "ALL" not in categories else "ALL"
+        self.log_event(f"Market effect: {cats} stocks {direction} for {days} days ({label})")
+
+    # -----------------------------
     # NYT SUBSCRIPTION TICK
     # -----------------------------
 
@@ -655,8 +693,22 @@ class DebtClicker:
                 data["return_index"] += 1
             else:
                 change = random.uniform(0.92, 1.08)
+
+            # Apply any active market effects for this stock's category
+            cat = data.get("category", "Custom")
+            for effect in self.market_effects:
+                if "ALL" in effect["categories"] or cat in effect["categories"]:
+                    change *= effect["multiplier"]
+
             data["price"] = max(0.01, data["price"] * change)
             data["history"].append(data["price"])
+
+        # Tick down effects and log expiry
+        for effect in self.market_effects:
+            effect["days_left"] -= 1
+            if effect["days_left"] == 0:
+                self.log_event(f"Market stabilising: {effect['label']} effect has ended.")
+        self.market_effects = [e for e in self.market_effects if e["days_left"] > 0]
 
     # -----------------------------
     # STOCK MARKET WINDOW
