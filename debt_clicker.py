@@ -1003,6 +1003,8 @@ class DebtClicker:
         self._rr_fired    = False
         self._rr_canvas   = canvas
         self._rr_revealed = False
+        self._rr_spinning = False
+        win.protocol("WM_DELETE_WINDOW", lambda: [setattr(self, '_rr_spinning', False), win.destroy()])
         self._draw_rr_cylinder()
 
         # Bet
@@ -1021,15 +1023,17 @@ class DebtClicker:
         btn_frame = tk.Frame(win, bg="#0e1117")
         btn_frame.pack()
 
-        tk.Button(btn_frame, text="🔄  Spin Cylinder",
+        self._rr_spin_btn = tk.Button(btn_frame, text="🔄  Spin Cylinder",
                   font=("Arial", 10), bg="#1e2130", fg="white", relief="flat",
                   padx=14, pady=6,
-                  command=self._rr_spin).pack(side="left", padx=8)
+                  command=self._rr_spin)
+        self._rr_spin_btn.pack(side="left", padx=8)
 
-        tk.Button(btn_frame, text="🔫  Fire",
+        self._rr_fire_btn = tk.Button(btn_frame, text="🔫  Fire",
                   font=("Arial", 10, "bold"), bg="#ff2222", fg="white", relief="flat",
                   padx=14, pady=6,
-                  command=lambda: self._rr_fire(win)).pack(side="left", padx=8)
+                  command=lambda: self._rr_fire(win))
+        self._rr_fire_btn.pack(side="left", padx=8)
 
     def _draw_rr_cylinder(self, reveal=False):
         c = self._rr_canvas
@@ -1070,36 +1074,42 @@ class DebtClicker:
     def _rr_spin(self):
         self._rr_bullet   = random.randint(0, 5)
         self._rr_revealed = False
+        self._rr_spinning = True
         self._rr_result.config(text="")
         self._animate_rr_spin(0)
 
     def _animate_rr_spin(self, step):
-        if step < 12:
-            # Draw rotated cylinder (just shuffles colors to simulate spin)
-            c = self._rr_canvas
-            c.delete("all")
-            cx, cy, ring_r, cham_r = 110, 110, 70, 22
-            c.create_oval(cx-ring_r-cham_r-8, cy-ring_r-cham_r-8,
-                          cx+ring_r+cham_r+8, cy+ring_r+cham_r+8,
-                          outline="#444", width=3, fill="#111")
-            c.create_oval(cx-18, cy-18, cx+18, cy+18, fill="#555", outline="#888", width=2)
-            offset = step * 5
-            for i in range(6):
-                angle = math.radians(i * 60 - 90 + offset)
-                x = cx + ring_r * math.cos(angle)
-                y = cy + ring_r * math.sin(angle)
-                c.create_oval(x-cham_r, y-cham_r, x+cham_r, y+cham_r,
-                              fill="#2a2a2a", outline="#666", width=2)
-                c.create_oval(x-8, y-8, x+8, y+8, fill="#333", outline="#555")
-            c.create_polygon(cx-8, cy-ring_r-cham_r-12,
-                             cx+8, cy-ring_r-cham_r-12,
-                             cx,   cy-ring_r-cham_r-2,
-                             fill="#ffdd44", outline="")
-            delay = 40 + step * 15
-            self.root.after(delay, lambda: self._animate_rr_spin(step + 1))
-        else:
-            self._draw_rr_cylinder()
-            self._rr_result.config(text="Cylinder spun. Ready to fire.", fg="#aaaaaa")
+        if not self._rr_spinning:
+            return
+        try:
+            if step < 12:
+                c = self._rr_canvas
+                c.delete("all")
+                cx, cy, ring_r, cham_r = 110, 110, 70, 22
+                c.create_oval(cx-ring_r-cham_r-8, cy-ring_r-cham_r-8,
+                              cx+ring_r+cham_r+8, cy+ring_r+cham_r+8,
+                              outline="#444", width=3, fill="#111")
+                c.create_oval(cx-18, cy-18, cx+18, cy+18, fill="#555", outline="#888", width=2)
+                offset = step * 5
+                for i in range(6):
+                    angle = math.radians(i * 60 - 90 + offset)
+                    x = cx + ring_r * math.cos(angle)
+                    y = cy + ring_r * math.sin(angle)
+                    c.create_oval(x-cham_r, y-cham_r, x+cham_r, y+cham_r,
+                                  fill="#2a2a2a", outline="#666", width=2)
+                    c.create_oval(x-8, y-8, x+8, y+8, fill="#333", outline="#555")
+                c.create_polygon(cx-8, cy-ring_r-cham_r-12,
+                                 cx+8, cy-ring_r-cham_r-12,
+                                 cx,   cy-ring_r-cham_r-2,
+                                 fill="#ffdd44", outline="")
+                delay = 40 + step * 15
+                self.root.after(delay, lambda: self._animate_rr_spin(step + 1))
+            else:
+                self._rr_spinning = False
+                self._draw_rr_cylinder()
+                self._rr_result.config(text="Cylinder spun. Ready to fire.", fg="#aaaaaa")
+        except tk.TclError:
+            self._rr_spinning = False
 
     def _rr_fire(self, win):
         try:
@@ -1108,13 +1118,20 @@ class DebtClicker:
             self._rr_result.config(text="Invalid bet.", fg="#ff4444")
             return
 
+        self._rr_spinning = False   # stop any in-progress spin animation
+        # Disable buttons to prevent double-fire
+        self._rr_spin_btn.config(state="disabled")
+        self._rr_fire_btn.config(state="disabled")
         self._draw_rr_cylinder(reveal=True)
 
         if self._rr_bullet == 0:   # chamber 0 is always "current" (at pointer)
             self._rr_result.config(text="💀 BANG. You're dead.", fg="#ff2222")
             self.log_event("You lost at Russian Roulette. RIP.")
             self.running = False
-            win.after(2000, lambda: [win.destroy(), self._show_end_screen()])
+            def _die():
+                win.destroy()
+                self._show_end_screen()
+            win.after(2000, _die)
         else:
             winnings = bet
             self.money += winnings
@@ -1589,9 +1606,8 @@ class DebtClicker:
         self.refresh_market()
 
 # -----------------------------
-# RUN GAME
+# RUN GAME  (entry point kept for backward compatibility — see main.py)
 # -----------------------------
 
-root = tk.Tk()
-game = DebtClicker(root)
-root.mainloop()
+if __name__ == "__main__":
+    from main import *
