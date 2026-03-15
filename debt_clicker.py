@@ -187,15 +187,20 @@ class DebtClicker:
         self.stock_labels = {}
 
         # Event state flags
-        self.epstein      = False
-        self.subscription = False
-        self.revolution   = True
-        self.pet          = True
-        self.mansion      = True
-        self.family       = True
-        self.company      = True
-        self.rich_relative= True
-        self.space        = False
+        self.epstein        = False
+        self.subscription   = False
+        self.revolution     = True
+        self.pet            = True
+        self.mansion        = True
+        self.family         = True
+        self.company        = True
+        self.rich_relative  = True
+        self.space          = False
+        self.ponzi          = False
+        self.oil_spill      = False
+        self.carbon         = False
+        self.insider_trading= False
+        self.pandemic       = False
 
         # Active market effects: list of {"categories": [...], "multiplier": float, "days_left": int, "label": str}
         self.market_effects = []
@@ -268,16 +273,21 @@ class DebtClicker:
         self.market.money = self.money
 
         # Reset event flags
-        self.epstein       = False
-        self.subscription  = False
-        self.revolution    = True
-        self.pet           = True
-        self.mansion       = True
-        self.family        = True
-        self.company       = True
-        self.rich_relative = True
-        self.space         = False
-        self.market_effects = []
+        self.epstein         = False
+        self.subscription    = False
+        self.revolution      = True
+        self.pet             = True
+        self.mansion         = True
+        self.family          = True
+        self.company         = True
+        self.rich_relative   = True
+        self.space           = False
+        self.ponzi           = False
+        self.oil_spill       = False
+        self.carbon          = False
+        self.insider_trading = False
+        self.pandemic        = False
+        self.market_effects  = []
 
         self.log_event("Your financial empire begins its slow decline...")
         self.log_event("Fetching live stock data for all markets...")
@@ -407,7 +417,7 @@ class DebtClicker:
     # -----------------------------
 
     def random_events(self):
-        r = random.randint(1, 50)  # ~38% chance an event fires each day
+        r = random.randint(1, 70)  # ~49% chance an event fires each day
 
         if r == 1 and self.family:
             self.family = False
@@ -534,6 +544,101 @@ class DebtClicker:
             self.show_event("Lawsuit Fail!",
                 "You sued a local news outlet for talking badly about you — but forgot about free speech. Lose $10,000,000.")
             self.apply_market_effect(["Entertainment"], 0.94, 2, "Media coverage backlash")
+
+        elif r == 20 and not self.ponzi:
+            self.ponzi = True
+            self.money -= 20000000
+            self.show_event("Ponzi Scheme Exposed!",
+                "Your side Ponzi scheme was discovered by the SEC. 2,000 retirees lost their savings. You lost $20,000,000 in fines.")
+            self.apply_market_effect(["Finance"], 0.90, 4, "Ponzi scheme collapse")
+
+        elif r == 21 and not self.oil_spill:
+            self.oil_spill = True
+            self.money -= 50000000
+            self.show_event("Oil Spill!",
+                "Your private tanker had a 'minor' accident off the coast. The ocean is now 40% oil. Pay $50,000,000 in cleanup costs.")
+            self.apply_market_effect(["Energy"], 0.88, 5, "Oil spill disaster")
+
+        elif r == 22:
+            self.money -= 10000000
+            self.show_event("Crypto Rug Pull!",
+                "You launched 'RichCoin' and immediately rug pulled it. Unfortunately you forgot you also invested $10,000,000 in it. Classic.")
+            self.apply_market_effect(["Finance", "AI"], 0.93, 2, "Crypto collapse")
+
+        elif r == 23:
+            self.money -= 8000000
+            self.show_event("Social Media Disaster!",
+                "You accidentally tweeted your offshore bank account password. $8,000,000 vanished within minutes. The tweet got 2 million likes.")
+            self.apply_market_effect(["Finance", "Technology"], 0.94, 2, "Data breach panic")
+
+        elif r == 24:
+            self.money -= 12000000
+            self.show_event("Art Forgery!",
+                "You sold fake Picassos to a Russian oligarch. He found out and sent some very polite gentlemen to collect. Lose $12,000,000.")
+            self.apply_market_effect(["Entertainment"], 0.92, 3, "Art fraud scandal")
+
+        elif r == 25 and not self.carbon:
+            self.carbon = True
+            self.money -= 30000000
+            self.show_event("Carbon Credits Scam!",
+                "You sold fake carbon credits to 47 Fortune 500 companies. The EPA found out. Lose $30,000,000. The planet is still dying.")
+            self.apply_market_effect(["Energy"], 0.91, 4, "Environmental fraud")
+
+        elif r == 26 and not self.insider_trading:
+            self.insider_trading = True
+            self.money -= 35000000
+            self.show_event("Insider Trading!",
+                "You got caught insider trading NVIDIA stock right before earnings. The SEC fined you $35,000,000. Worth it honestly.")
+            self.apply_market_effect(["AI", "Finance"], 0.89, 4, "Insider trading scandal")
+
+        elif r == 27:
+            self.money -= 15000000
+            self.show_event("Hitman Mishap!",
+                "You hired a hitman to deal with a business rival. He was an undercover FBI agent. Pay $15,000,000 in legal fees. Your rival is fine.")
+            self.apply_market_effect(["Defense"], 0.93, 2, "Criminal investigation")
+
+        elif r == 28:
+            self.money -= 20000000
+            self.show_event("Casino Money Laundering!",
+                "You used a casino to launder money. Casinos report large cash transactions. The IRS called. Lose $20,000,000.")
+            self.apply_market_effect(["Finance", "Entertainment"], 0.91, 3, "Money laundering probe")
+
+        elif r == 29:
+            self.money -= 10000000
+            self.show_event("Lobbyist Caught!",
+                "Your lobbyist was filmed handing a suitcase of cash to a senator in broad daylight. Lose $10,000,000. The senator kept the money.")
+            self.apply_market_effect(["Finance", "Defense"], 0.93, 2, "Political corruption scandal")
+
+        elif r == 30:
+            self.money -= 5000000
+            self.show_event("Drunk Pilot!",
+                "Your personal pilot landed your private jet on a busy highway after one too many in-flight drinks. Pay $5,000,000 in damages.")
+
+        elif r == 31:
+            self.money -= 25000000
+            self.show_event("Hostile Takeover Attempt!",
+                "A larger corporation tried a hostile takeover of your assets. You survived, but spent $25,000,000 in legal defense. They'll be back.")
+            self.apply_market_effect(["Finance"], 1.04, 2, "M&A activity surge")
+
+        elif r == 32:
+            self.money -= 7000000
+            self.show_event("Bribed the Wrong Judge!",
+                "You bribed a judge but got the wrong courtroom. You needed room 2B, not 2A. Lose $7,000,000. The case is still ongoing.")
+            self.apply_market_effect(["Finance"], 0.96, 1, "Legal uncertainty")
+
+        elif r == 33:
+            self.money -= 15000000
+            self.show_event("Climate Lawsuit!",
+                "You lobbied against climate regulations for 20 years. 47 Pacific island nations just sued you. Lose $15,000,000. Oops.")
+            self.apply_market_effect(["Energy"], 0.92, 3, "Climate litigation")
+            self.apply_market_effect(["Retail"], 0.96, 2, "Consumer backlash")
+
+        elif r == 34 and not self.pandemic:
+            self.pandemic = True
+            self.money *= 0.60
+            self.show_event("Pandemic Investment!",
+                "You invested your entire liquid assets into a company selling horse dewormer as a COVID cure. Lose 40% of your money. No refunds.")
+            self.apply_market_effect(["Healthcare"], 0.88, 3, "Medical misinformation")
 
         self.market.money = self.money
 
