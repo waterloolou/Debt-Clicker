@@ -107,6 +107,7 @@ class ScreensMixin:
             ("Work",         self.work),
             ("Casino",       self.open_casino),
             ("Stock Market", self.open_stock_market),
+            ("Assets",       self.open_assets),
         ]:
             tk.Button(btn_frame, text=text,
                       font=("Arial", 10), bg="#1e2130", fg="white",

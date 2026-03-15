@@ -10,9 +10,10 @@ from screens_mixin import ScreensMixin
 from events_mixin import EventsMixin
 from casino_mixin import CasinoMixin
 from stock_window_mixin import StockWindowMixin
+from assets_mixin import AssetsMixin
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin):
+class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -62,6 +63,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin):
         self.insider_trading = False
         self.pandemic        = False
         self.market_effects  = []
+        self.owned_assets    = set()
 
     # =========================================================
     # GAME START
@@ -190,4 +192,5 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin):
         self.money -= lost
         self.market.money = self.money
         self.log_event(f"Lost ${lost:,}")
+        self.apply_asset_costs()
         self.update_status()

@@ -19,8 +19,12 @@ class EventsMixin:
             self.apply_market_effect(["Finance"], 0.93, 3, "Divorce scandal")
 
         elif r == 2:
-            self.money *= 0.30
-            self.show_event("Tax Fraud!", "You filed a fraudulent tax report. The IRS found out — lose 70% of your money!")
+            if "offshore" in self.owned_assets:
+                self.money *= 0.65
+                self.show_event("Tax Fraud!", "You filed a fraudulent tax report. The IRS found out — but your offshore account shielded half the damage. Lose 35%.")
+            else:
+                self.money *= 0.30
+                self.show_event("Tax Fraud!", "You filed a fraudulent tax report. The IRS found out — lose 70% of your money!")
             self.apply_market_effect(["Finance"], 0.91, 2, "Tax fraud scandal")
 
         elif r == 3 and self.company:
@@ -85,10 +89,13 @@ class EventsMixin:
             self.apply_market_effect(["Retail", "Automotive"], 0.92, 3, "Factory shutdown")
 
         elif r == 14 and self.mansion:
-            self.mansion = False
-            self.show_event("Cuba Invades!", "The island your private mansion sits on was just invaded by Cuba. You lost your mansion.")
-            self.apply_market_effect(["Defense"], 1.06, 3, "Geopolitical tension")
-            self.apply_market_effect(["Space"], 0.93, 2, "Airspace conflict")
+            if "island" in self.owned_assets:
+                self.show_event("Cuba Tries to Invade!", "Cuba eyed your island — but your sovereign territory kept them out. Your Private Island paid off.")
+            else:
+                self.mansion = False
+                self.show_event("Cuba Invades!", "The island your private mansion sits on was just invaded by Cuba. You lost your mansion.")
+                self.apply_market_effect(["Defense"], 1.06, 3, "Geopolitical tension")
+                self.apply_market_effect(["Space"], 0.93, 2, "Airspace conflict")
 
         elif r == 15 and not self.subscription:
             self.subscription = True
@@ -115,8 +122,12 @@ class EventsMixin:
             self.apply_market_effect(["Finance", "Defense"], 1.05, 2, "Government contracts")
 
         elif r == 19:
-            self.money -= 10000000
-            self.show_event("Lawsuit Fail!", "You sued a local news outlet for talking badly about you — but forgot about free speech. Lose $10,000,000.")
+            fine = 10_000_000 if "senator" not in self.owned_assets else 6_000_000
+            self.money -= fine
+            if "senator" in self.owned_assets:
+                self.show_event("Lawsuit Fail!", f"You sued a local news outlet — forgot about free speech. Your senator got the fine down to ${fine:,}.")
+            else:
+                self.show_event("Lawsuit Fail!", "You sued a local news outlet for talking badly about you — but forgot about free speech. Lose $10,000,000.")
             self.apply_market_effect(["Entertainment"], 0.94, 2, "Media coverage backlash")
 
         elif r == 20 and not self.ponzi:
@@ -195,9 +206,12 @@ class EventsMixin:
 
         elif r == 34 and not self.pandemic:
             self.pandemic = True
-            self.money *= 0.60
-            self.show_event("Pandemic Investment!", "You invested your entire liquid assets into a company selling horse dewormer as a COVID cure. Lose 40% of your money. No refunds.")
-            self.apply_market_effect(["Healthcare"], 0.88, 3, "Medical misinformation")
+            if "bunker" in self.owned_assets:
+                self.show_event("Pandemic? What Pandemic?", "A global pandemic swept the world. You were safe in your doomsday bunker eating canned beans. No financial damage.")
+            else:
+                self.money *= 0.60
+                self.show_event("Pandemic Investment!", "You invested your entire liquid assets into a company selling horse dewormer as a COVID cure. Lose 40% of your money. No refunds.")
+                self.apply_market_effect(["Healthcare"], 0.88, 3, "Medical misinformation")
 
         self.market.money = self.money
 
