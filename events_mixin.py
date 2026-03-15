@@ -111,10 +111,14 @@ class EventsMixin:
 
         elif r == 17 and not self.space:
             self.space = True
-            self.money -= 500000000
-            self.show_event("Space Program Disaster!", "You created a space program. On the first launch, the rocket explodes and kills everyone on board. Pay $500,000,000 in damages.")
-            self.apply_market_effect(["Space"], 0.75, 5, "Space disaster")
-            self.apply_market_effect(["Technology", "Defense"], 0.93, 3, "Space sector contagion")
+            if "jet" in self.owned_assets and not self.jet_skip_used:
+                self.jet_skip_used = True
+                self.show_event("Space Program Disaster... Avoided!", "Your rocket exploded — but you were already airborne in your private jet to the Maldives. PR team handled it. You missed the whole thing.")
+            else:
+                self.money -= 500_000_000
+                self.show_event("Space Program Disaster!", "You created a space program. On the first launch, the rocket explodes and kills everyone on board. Pay $500,000,000 in damages.")
+                self.apply_market_effect(["Space"], 0.75, 5, "Space disaster")
+                self.apply_market_effect(["Technology", "Defense"], 0.93, 3, "Space sector contagion")
 
         elif r == 18:
             self.money += 5000000
@@ -148,8 +152,12 @@ class EventsMixin:
             self.apply_market_effect(["Finance", "AI"], 0.93, 2, "Crypto collapse")
 
         elif r == 23:
-            self.money -= 8000000
-            self.show_event("Social Media Disaster!", "You accidentally tweeted your offshore bank account password. $8,000,000 vanished within minutes. The tweet got 2 million likes.")
+            if "media" in self.owned_assets:
+                self.money -= 2_000_000
+                self.show_event("Social Media Disaster!", "You tweeted your bank password — but your media empire buried the story within the hour. Damage control cost $2,000,000 instead of $8,000,000.")
+            else:
+                self.money -= 8_000_000
+                self.show_event("Social Media Disaster!", "You accidentally tweeted your offshore bank account password. $8,000,000 vanished within minutes. The tweet got 2 million likes.")
             self.apply_market_effect(["Finance", "Technology"], 0.94, 2, "Data breach panic")
 
         elif r == 24:
@@ -170,9 +178,12 @@ class EventsMixin:
             self.apply_market_effect(["AI", "Finance"], 0.89, 4, "Insider trading scandal")
 
         elif r == 27:
-            self.money -= 15000000
-            self.show_event("Hitman Mishap!", "You hired a hitman to deal with a business rival. He was an undercover FBI agent. Pay $15,000,000 in legal fees. Your rival is fine.")
-            self.apply_market_effect(["Defense"], 0.93, 2, "Criminal investigation")
+            if "army" in self.owned_assets:
+                self.show_event("Hitman Mishap!", "You hired a hitman — but your private army ran a background check first. Turns out he was FBI. You thanked your mercenaries and sent him packing. No charge.")
+            else:
+                self.money -= 15_000_000
+                self.show_event("Hitman Mishap!", "You hired a hitman to deal with a business rival. He was an undercover FBI agent. Pay $15,000,000 in legal fees. Your rival is fine.")
+                self.apply_market_effect(["Defense"], 0.93, 2, "Criminal investigation")
 
         elif r == 28:
             self.money -= 20000000
@@ -185,8 +196,12 @@ class EventsMixin:
             self.apply_market_effect(["Finance", "Defense"], 0.93, 2, "Political corruption scandal")
 
         elif r == 30:
-            self.money -= 5000000
-            self.show_event("Drunk Pilot!", "Your personal pilot landed your private jet on a busy highway after one too many in-flight drinks. Pay $5,000,000 in damages.")
+            if "yacht" in self.owned_assets:
+                self.money -= 800_000
+                self.show_event("Drunk Captain!", "Your yacht captain crashed into a buoy after one too many cocktails. Minor hull damage — $800,000 repair. At least it wasn't the highway.")
+            else:
+                self.money -= 5_000_000
+                self.show_event("Drunk Pilot!", "Your personal pilot landed your private jet on a busy highway after one too many in-flight drinks. Pay $5,000,000 in damages.")
 
         elif r == 31:
             self.money -= 25000000

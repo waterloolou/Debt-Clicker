@@ -64,6 +64,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.pandemic        = False
         self.market_effects  = []
         self.owned_assets    = set()
+        self.jet_skip_used   = False
 
     # =========================================================
     # GAME START
