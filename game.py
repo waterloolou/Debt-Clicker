@@ -11,9 +11,10 @@ from events_mixin import EventsMixin
 from casino_mixin import CasinoMixin
 from stock_window_mixin import StockWindowMixin
 from assets_mixin import AssetsMixin
+from world_map_mixin import WorldMapMixin
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin):
+class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -65,6 +66,8 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.market_effects  = []
         self.owned_assets    = set()
         self.jet_skip_used   = False
+        self.bombed_countries = set()
+        self.oil_operations  = []
 
     # =========================================================
     # GAME START
@@ -171,6 +174,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.lose_money()
         self.random_events()
         self.update_stock_prices()
+        self.process_oil_income()
         if self.money <= 0:
             self.running = False
             self.log_event("You lost everything.")
