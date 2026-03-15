@@ -383,10 +383,33 @@ class DebtClicker:
         self.show_screen("end")
 
     def _play_again(self):
-        self.username_entry.delete(0, tk.END)
+        # Clear log
         self.log.config(state="normal")
         self.log.delete("1.0", tk.END)
         self.log.config(state="disabled")
+
+        # Reset all stocks to fresh random prices
+        for category, stocks in STOCK_CATEGORIES.items():
+            lo, hi = CATEGORY_PRICE_RANGES.get(category, (10, 500))
+            for name in stocks:
+                if name in self.market.stocks:
+                    price = round(random.uniform(lo, hi), 2)
+                    self.market.stocks[name].update({
+                        "price":        price,
+                        "shares":       0,
+                        "history":      [price],
+                        "returns":      [],
+                        "return_index": 0,
+                    })
+        # Reset any custom stocks too
+        for name, data in self.market.stocks.items():
+            if data.get("category") == "Custom":
+                data["shares"] = 0
+                data["history"] = [data["price"]]
+                data["returns"] = []
+                data["return_index"] = 0
+
+        self.username_entry.delete(0, tk.END)
         self.show_screen("start")
 
     # =========================================================
@@ -555,7 +578,7 @@ class DebtClicker:
             self.log_event("You lost everything.")
             self.root.after(1500, self._show_end_screen)
             return
-        self.root.after(5000, self.main_loop)
+        self.root.after(60000, self.main_loop)
 
     # =========================================================
     # DAILY MONEY LOSS
