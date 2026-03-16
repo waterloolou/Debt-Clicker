@@ -92,14 +92,184 @@ class ScreensMixin:
                   padx=30, pady=8,
                   command=self._on_start_clicked).pack(pady=16)
 
-        tk.Button(frame, text="Leaderboard",
+        bottom_row = tk.Frame(frame, bg="#0e1117")
+        bottom_row.pack(pady=(0, 0))
+
+        tk.Button(bottom_row, text="Leaderboard",
                   font=("Arial", 10), bg="#1e2130", fg="#aaaaaa",
                   activebackground="#2e3140", relief="flat",
                   padx=20, pady=5,
                   command=lambda: [self._populate_leaderboard(),
-                                   self.show_screen("leaderboard")]).pack()
+                                   self.show_screen("leaderboard")]).pack(side="left", padx=8)
+
+        tk.Button(bottom_row, text="Wiki",
+                  font=("Arial", 10), bg="#1e2130", fg="#aaaaaa",
+                  activebackground="#2e3140", relief="flat",
+                  padx=20, pady=5,
+                  command=self._open_wiki).pack(side="left", padx=8)
 
         return frame
+
+    # =========================================================
+    # WIKI
+    # =========================================================
+
+    def _open_wiki(self):
+        win = tk.Toplevel(self.root)
+        win.title("Debt Clicker — Wiki")
+        win.configure(bg="#0e1117")
+        win.geometry("620x680")
+        win.resizable(False, True)
+
+        tk.Label(win, text="DEBT CLICKER WIKI",
+                 font=("Impact", 28), bg="#0e1117", fg="#ff2222").pack(pady=(20, 4))
+        tk.Label(win, text="Everything you need to know about your downfall.",
+                 font=("Arial", 9), bg="#0e1117", fg="#555").pack(pady=(0, 10))
+
+        # Scrollable content
+        container = tk.Frame(win, bg="#0e1117")
+        container.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+
+        canvas = tk.Canvas(container, bg="#0e1117", highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg="#0e1117")
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        def _on_scroll(e):
+            try:
+                canvas.yview_scroll(-1 * (e.delta // 120), "units")
+            except tk.TclError:
+                pass
+        canvas.bind_all("<MouseWheel>", _on_scroll)
+        win.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        SECTIONS = [
+            ("GOAL", "#ff2222", [
+                ("Survive", "You start with $100,000,000. Every game day (60 real seconds) you lose a random amount of money. Your goal is to stay solvent as long as possible. When you hit $0, it's over."),
+            ]),
+            ("WORK", "#00ff90", [
+                ("Work Button", "Click Work on the main screen to earn a small amount of money instantly. Higher income variants unlock as you play."),
+            ]),
+            ("CASINO", "#ffdd44", [
+                ("Russian Roulette", "Bet money for a 5-in-6 chance to double it. If you lose, the game ends immediately."),
+                ("Slot Machine", "Spin 3 reels. Match symbols to multiply your bet. Higher matches pay more."),
+                ("Poker", "5-card draw against the house. Best hand takes the pot."),
+            ]),
+            ("STOCK MARKET", "#0099ff", [
+                ("Buying & Selling", "Buy and sell shares in real stocks across categories: AI, Technology, Energy, Finance, Healthcare, and more. Prices update every real second using live market data (or simulated if offline)."),
+                ("Price History", "Click any stock name to open a graph of its price history."),
+                ("Custom Stocks", "Create your own stock with a custom name, price, and category."),
+                ("Pump", "Spend $5M to inflate a stock you own by 25%. Triggers a market boost but adds 8 transgressions."),
+                ("Dump", "Sell all your shares at 1.5x current price, then crash the stock by 45%. Adds 12 transgressions."),
+                ("Market Effects", "Events and world operations temporarily boost or crash entire stock categories. Watch the log for active effects."),
+            ]),
+            ("ASSETS", "#ffaa00", [
+                ("Luxury Purchases", "Buy assets like supercars, a private jet, megayacht, or doomsday bunker. Each costs daily upkeep."),
+                ("Passive Income", "Some assets (Media Empire, Oil Rig, Space Program) generate daily income that partially offsets upkeep."),
+                ("Special Effects", "Certain assets protect you from specific events — the bunker skips pandemics, the offshore account halves tax fraud losses, the private army detects undercover FBI agents."),
+                ("Private Islands", "Open the island sub-map to browse and buy 18 real private islands worldwide. Each earns daily income."),
+            ]),
+            ("WORLD MAP", "#cc8800", [
+                ("Resources", "Select a resource type (Oil, Diamonds, Minerals, Agriculture, Technology, Finance) from the dropdown. Highlighted countries have reserves you can seize."),
+                ("Bomb", "The aggressive option. Full cost, full income, full duration. Adds 20 transgressions and 20 opinion hit. 30% chance of triggering sanctions."),
+                ("Stage a Coup", "The subtle option. 35% of the cost, 60% of the income, 70% of the duration. Adds 10 transgressions and 8 opinion hit."),
+                ("Income", "Seized countries pay daily resource income for the operation's duration, then the occupation ends automatically."),
+                ("Sanctions", "If a country sanctions you after a bombing, you pay $500K/day for up to 15 days. Sanctions stack."),
+                ("Homeland", "You cannot attack your own country."),
+            ]),
+            ("ALLIANCE SYSTEM", "#4499ff", [
+                ("Alliances", "Spend $50M to ally with USA, Russia, or China for 30 days."),
+                ("Discounts", "USA: 30% off Western nations. Russia: 30% off Eastern/Central nations. China: 30% off Asia-Pacific nations."),
+                ("Expiry", "Alliances expire after 30 days. You must re-sign and pay again."),
+            ]),
+            ("LOBBY SYSTEM", "#ffaa00", [
+                ("Bribe Local Official", "$500K — reduces transgressions by 10."),
+                ("Control the Narrative", "$5M — boosts public opinion by 20."),
+                ("Buy a Congressman", "$15M — reduces transgressions by 20, boosts opinion by 15."),
+                ("Senate Immunity", "$40M — blocks the next bad random event entirely. One use only."),
+                ("Presidential Pardon", "$100M — resets transgressions to 0, boosts opinion by 30."),
+            ]),
+            ("BLACK MARKET", "#ff2222", [
+                ("Stolen Corporate Data", "+$8M | +12 transgressions"),
+                ("Arms Smuggling", "+$10M | +18 transgressions"),
+                ("Laundered Cash", "+$20M | +20 transgressions"),
+                ("Forged Documents", "-$3M | -15 transgressions (buy a clean record)"),
+                ("Organ Trafficking", "+$25M | +30 transgressions — the darkest trade"),
+            ]),
+            ("DEBT & LOANS", "#ff6600", [
+                ("Taking Loans", "Borrow $10M (8%/day), $50M (6%/day), or $200M (4%/day) for a 30-day term."),
+                ("Interest", "Interest compounds daily on the remaining balance. The longer you wait, the more you owe."),
+                ("Repaying", "Repay manually anytime, or loans auto-repay on expiry if you have the funds."),
+                ("Default", "If you can't repay at expiry, you lose 50% of your remaining money and gain 15 transgressions."),
+            ]),
+            ("RIVALS", "#cc44ff", [
+                ("Viktor Drago, Chen Wei, Elizabeth Harlow", "Three AI billionaires compete for the same resource countries as you. Each day they have a chance to seize an unoccupied country."),
+                ("Rival Country", "If a rival controls a country you want, you can pay 2x the normal action cost to buy them out."),
+                ("Tracking", "Open the Rivals window to see each rival's net worth and which countries they control."),
+            ]),
+            ("STAT BARS", "#888888", [
+                ("Happiness", "Increases when you spend money (assets, islands, lobbying). Decays by 2 every day. Higher happiness has no direct penalty — but low happiness makes the game feel grim."),
+                ("Public Opinion", "Decreases with transgressions. Slowly recovers by 0.5/day. If it hits 0 or below 5, a country declares war on you."),
+                ("Transgressions", "Accumulates with every illegal or morally questionable action. Never decreases naturally — use Lobby or Forged Documents to clean it."),
+            ]),
+            ("INFAMY TIERS", "#ff9900", [
+                ("Tier 0 — Nobody", "0–19 transgressions. Clean record."),
+                ("Tier 1 — Shady", "20–39 transgressions. People are starting to talk."),
+                ("Tier 2 — Crime Lord", "40–59 transgressions. Serious heat."),
+                ("Tier 3 — War Criminal", "60–79 transgressions. International warrants."),
+                ("Tier 4 — Antichrist", "80–99 transgressions. You are the villain."),
+                ("Tier 5 — ENDGAME", "100 transgressions. Maximum infamy."),
+            ]),
+            ("WANTED LEVEL", "#ff4444", [
+                ("Clean", "0–19 transgressions. No attention."),
+                ("Media Attention", "20–39 — press coverage. Daily fine: $500K."),
+                ("Senate Investigation", "40–59 — congressional probe. Daily fine: $1M."),
+                ("FBI Target", "60–79 — federal investigation. Daily fine: $1.5M."),
+                ("Interpol Red Notice", "80+ — global manhunt. Daily fine: $2M."),
+            ]),
+            ("WAR EVENTS", "#ff2222", [
+                ("Trigger", "If your public opinion drops to 5 or below, a random country declares war on you."),
+                ("Consequences", "Lose $30M–$80M instantly, gain 30 transgressions, receive 15-day sanctions from the attacker, and markets crash."),
+                ("Recovery", "After a war event, public opinion resets to 15 to prevent immediate looping."),
+            ]),
+            ("RANDOM EVENTS", "#888888", [
+                ("Frequency", "Every game day, one of 34 possible random events fires. Most are bad. A few are lucky windfalls."),
+                ("Notable Events", "Gold Digger (lose half your money), Epstein Island (lose $10M), Space Disaster (lose $500M), Pandemic, Ponzi Scheme Exposed, and more."),
+                ("Asset Protection", "Certain assets protect you from specific events. Buy the right gear before disaster strikes."),
+                ("Senate Immunity", "Spend $40M in the Lobby to guarantee one bad event is completely skipped."),
+            ]),
+            ("LEGACY SYSTEM", "#aaaaaa", [
+                ("Carry-Over Bonus", "If you survive 10+ days, a cash bonus is saved to disk when your empire collapses."),
+                ("Next Run", "The bonus is automatically applied to your starting money in the next game (+$300K per day survived, capped at $50M)."),
+                ("Persistence", "The bonus is stored in legacy.json in the game folder and persists between sessions."),
+            ]),
+            ("NEWS TICKER", "#ffaa00", [
+                ("Scrolling Headlines", "The gold ticker bar below the stat bars shows recent major events as they happen — market moves, wars, rival activity, sanctions, and more."),
+            ]),
+        ]
+
+        for section_title, color, entries in SECTIONS:
+            # Section header
+            hdr = tk.Frame(inner, bg=color, height=2)
+            hdr.pack(fill="x", padx=8, pady=(14, 0))
+            tk.Label(inner, text=section_title,
+                     font=("Impact", 14), bg="#0e1117", fg=color,
+                     anchor="w").pack(fill="x", padx=12, pady=(2, 4))
+
+            for entry_title, entry_body in entries:
+                entry_frame = tk.Frame(inner, bg="#111520", padx=12, pady=6)
+                entry_frame.pack(fill="x", padx=8, pady=2)
+                tk.Label(entry_frame, text=entry_title,
+                         font=("Arial", 9, "bold"), bg="#111520", fg="white",
+                         anchor="w").pack(anchor="w")
+                tk.Label(entry_frame, text=entry_body,
+                         font=("Arial", 8), bg="#111520", fg="#aaaaaa",
+                         wraplength=540, justify="left", anchor="w").pack(anchor="w")
 
     def _on_start_clicked(self):
         name = self.username_entry.get().strip()
