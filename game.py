@@ -12,9 +12,10 @@ from casino_mixin import CasinoMixin
 from stock_window_mixin import StockWindowMixin
 from assets_mixin import AssetsMixin
 from world_map_mixin import WorldMapMixin
+from island_map_mixin import IslandMapMixin
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin):
+class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -25,6 +26,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.root.resizable(False, False)
 
         self.username        = ""
+        self.country         = ""
         self.money           = 100_000_000
         self.days            = 0
         self.running         = False
@@ -67,7 +69,12 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.owned_assets    = set()
         self.jet_skip_used   = False
         self.bombed_countries = set()
+        self.action_taken    = {}
         self.oil_operations  = []
+        self.owned_islands   = set()
+        self.happiness       = 50
+        self.public_opinion  = 75
+        self.transgressions  = 0
 
     # =========================================================
     # GAME START
@@ -174,7 +181,8 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.lose_money()
         self.random_events()
         self.update_stock_prices()
-        self.process_oil_income()
+        self.process_resource_income()
+        self.process_island_income()
         if self.money <= 0:
             self.running = False
             self.log_event("You lost everything.")
@@ -198,4 +206,21 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.market.money = self.money
         self.log_event(f"Lost ${lost:,}")
         self.apply_asset_costs()
+        # Daily metric drift: happiness decays, opinion slowly recovers
+        self.happiness      = max(0,   self.happiness      - 2)
+        self.public_opinion = min(100, self.public_opinion + 0.5)
         self.update_status()
+
+    # =========================================================
+    # STAT HELPERS
+    # =========================================================
+
+    def add_happiness(self, n):
+        self.happiness = min(100, self.happiness + n)
+        self._update_bars()
+
+    def add_transgression(self, n, opinion_hit=None):
+        self.transgressions  = min(100, self.transgressions + n)
+        hit = opinion_hit if opinion_hit is not None else n // 2
+        self.public_opinion  = max(0,   self.public_opinion - hit)
+        self._update_bars()

@@ -1,9 +1,25 @@
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import scrolledtext, ttk
 import json
 import random
 
 from constants import LEADERBOARD_FILE, STOCK_CATEGORIES, CATEGORY_PRICE_RANGES
+
+PLAYABLE_COUNTRIES = sorted([
+    # Superpowers
+    "United States of America", "Russia", "China",
+    # Western-aligned
+    "Canada", "Australia", "Japan", "South Korea",
+    # Europe
+    "Albania", "Austria", "Belarus", "Belgium",
+    "Bosnia and Herzegovina", "Bulgaria", "Croatia", "Cyprus",
+    "Czech Republic", "Denmark", "Estonia", "Finland", "France",
+    "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy",
+    "Latvia", "Lithuania", "Luxembourg", "Moldova", "Montenegro",
+    "Netherlands", "North Macedonia", "Norway", "Poland", "Portugal",
+    "Romania", "Serbia", "Slovakia", "Slovenia", "Spain", "Sweden",
+    "Switzerland", "Ukraine", "United Kingdom",
+])
 
 
 class ScreensMixin:
@@ -48,6 +64,24 @@ class ScreensMixin:
                                        justify="center")
         self.username_entry.pack(pady=8, ipady=6)
 
+        tk.Label(frame, text="Select your country:", font=("Arial", 11),
+                 bg="#0e1117", fg="white").pack()
+
+        self.country_var = tk.StringVar()
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Dark.TCombobox",
+                        fieldbackground="#1e2130", background="#1e2130",
+                        foreground="white", selectbackground="#2e3140",
+                        selectforeground="white", arrowcolor="white")
+        self.country_combo = ttk.Combobox(frame, textvariable=self.country_var,
+                                          values=PLAYABLE_COUNTRIES,
+                                          state="readonly", width=24,
+                                          font=("Arial", 11),
+                                          style="Dark.TCombobox",
+                                          justify="center")
+        self.country_combo.pack(pady=6)
+
         self.start_error = tk.Label(frame, text="", font=("Arial", 9),
                                     bg="#0e1117", fg="#ff4444")
         self.start_error.pack()
@@ -72,8 +106,13 @@ class ScreensMixin:
         if not name:
             self.start_error.config(text="Please enter a name.")
             return
+        country = self.country_var.get()
+        if not country:
+            self.start_error.config(text="Please select a country.")
+            return
         self.start_error.config(text="")
         self.username = name
+        self.country  = country
         self.show_screen("game")
         self.start_game()
 
@@ -116,7 +155,34 @@ class ScreensMixin:
                       padx=14, pady=5,
                       command=cmd).pack(side="left", padx=6)
 
-        self.log = scrolledtext.ScrolledText(frame, height=28, state="disabled",
+        # ── Stat bars ──────────────────────────────────────────
+        bars_frame = tk.Frame(frame, bg="#0e1117")
+        bars_frame.pack(fill="x", padx=12, pady=(0, 4))
+
+        def _make_bar(parent, label, init_val, color):
+            col = tk.Frame(parent, bg="#0e1117")
+            col.pack(side="left", expand=True, fill="x", padx=5)
+
+            hdr = tk.Frame(col, bg="#0e1117")
+            hdr.pack(fill="x")
+            tk.Label(hdr, text=label, font=("Arial", 7),
+                     bg="#0e1117", fg="#555").pack(side="left")
+            val_lbl = tk.Label(hdr, text=str(init_val),
+                               font=("Arial", 7, "bold"), bg="#0e1117", fg=color)
+            val_lbl.pack(side="right")
+
+            track = tk.Frame(col, bg="#1a1a2e", height=8)
+            track.pack(fill="x")
+            track.pack_propagate(False)
+            fill = tk.Frame(track, bg=color, height=8)
+            fill.place(relx=0, rely=0, relheight=1, relwidth=max(0.001, init_val / 100))
+            return fill, val_lbl
+
+        self._bar_happy_fill,  self._bar_happy_lbl  = _make_bar(bars_frame, "Happiness",      50, "#00ff90")
+        self._bar_opinion_fill, self._bar_opinion_lbl = _make_bar(bars_frame, "Public Opinion", 75, "#4499ff")
+        self._bar_trans_fill,  self._bar_trans_lbl  = _make_bar(bars_frame, "Transgressions",   0, "#ff9900")
+
+        self.log = scrolledtext.ScrolledText(frame, height=26, state="disabled",
                                              bg="#0a0d13", fg="#cccccc",
                                              font=("Consolas", 9), relief="flat",
                                              insertbackground="white")
@@ -200,6 +266,7 @@ class ScreensMixin:
                 data["return_index"] = 0
 
         self.username_entry.delete(0, tk.END)
+        self.country_var.set("")
         self.show_screen("start")
 
     # =========================================================
@@ -291,3 +358,36 @@ class ScreensMixin:
     def update_status(self):
         self.money_label.config(text=f"Money: ${int(self.money):,}")
         self.day_label.config(text=f"Day {self.days}")
+        self._update_bars()
+
+    def _update_bars(self):
+        if not hasattr(self, "_bar_happy_fill"):
+            return
+
+        h = getattr(self, "happiness",      50)
+        o = getattr(self, "public_opinion", 75)
+        t = getattr(self, "transgressions",  0)
+
+        # Happiness colour: green → yellow → red
+        if h > 60:   hc = "#00ff90"
+        elif h > 30: hc = "#ffaa00"
+        else:        hc = "#ff4444"
+        self._bar_happy_fill.place(relwidth=max(0.001, min(1, h / 100)))
+        self._bar_happy_fill.config(bg=hc)
+        self._bar_happy_lbl.config(text=f"{int(h)}%", fg=hc)
+
+        # Public opinion: blue → yellow → red
+        if o > 60:   oc = "#4499ff"
+        elif o > 30: oc = "#ffaa00"
+        else:        oc = "#ff4444"
+        self._bar_opinion_fill.place(relwidth=max(0.001, min(1, o / 100)))
+        self._bar_opinion_fill.config(bg=oc)
+        self._bar_opinion_lbl.config(text=f"{int(o)}%", fg=oc)
+
+        # Transgressions: orange → deep red
+        if t > 70:   tc = "#ff2222"
+        elif t > 40: tc = "#ff6600"
+        else:        tc = "#ff9900"
+        self._bar_trans_fill.place(relwidth=max(0.001, min(1, t / 100)))
+        self._bar_trans_fill.config(bg=tc)
+        self._bar_trans_lbl.config(text=str(int(t)), fg=tc)

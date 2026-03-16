@@ -26,11 +26,13 @@ class EventsMixin:
                 self.money *= 0.30
                 self.show_event("Tax Fraud!", "You filed a fraudulent tax report. The IRS found out — lose 70% of your money!")
             self.apply_market_effect(["Finance"], 0.91, 2, "Tax fraud scandal")
+            self.add_transgression(10, 8)
 
         elif r == 3 and self.company:
             self.money -= 50000
             self.show_event("Factory Incident!", "One of your child workers at your illegal factory got mutilated by machinery. Pay $50,000 to cover it up.")
             self.apply_market_effect(["Retail", "Automotive"], 0.94, 2, "Factory scandal")
+            self.add_transgression(8, 6)
 
         elif r == 4 and self.rich_relative:
             self.rich_relative = False
@@ -57,6 +59,7 @@ class EventsMixin:
             self.money -= 10000000
             self.show_event("Island Discovered...", "Your ventures to Epstein's island have been discovered. Lose $10,000,000 to cover it up.")
             self.apply_market_effect(["Entertainment", "Finance"], 0.88, 4, "Epstein scandal")
+            self.add_transgression(20, 20)
 
         elif r == 8:
             self.money -= 5000000
@@ -87,9 +90,10 @@ class EventsMixin:
             self.money -= 1000000
             self.show_event("Factory Shutdown!", "All your foreign investments in underage factory workers are exposed. Workers freed — you pay $1,000,000 in damages.")
             self.apply_market_effect(["Retail", "Automotive"], 0.92, 3, "Factory shutdown")
+            self.add_transgression(10, 12)
 
         elif r == 14 and self.mansion:
-            if "island" in self.owned_assets:
+            if "island" in self.owned_assets or self.owned_islands:
                 self.show_event("Cuba Tries to Invade!", "Cuba eyed your island — but your sovereign territory kept them out. Your Private Island paid off.")
             else:
                 self.mansion = False
@@ -108,6 +112,7 @@ class EventsMixin:
             self.show_event("Weapons Deal", "You are funding a genocide. Pay $10,000,000 in weapons and supplies.")
             self.apply_market_effect(["Defense"], 1.08, 3, "Weapons demand surge")
             self.apply_market_effect(["Energy"], 0.91, 4, "War zone instability")
+            self.add_transgression(18, 15)
 
         elif r == 17 and not self.space:
             self.space = True
@@ -139,17 +144,20 @@ class EventsMixin:
             self.money -= 20000000
             self.show_event("Ponzi Scheme Exposed!", "Your side Ponzi scheme was discovered by the SEC. 2,000 retirees lost their savings. You lost $20,000,000 in fines.")
             self.apply_market_effect(["Finance"], 0.90, 4, "Ponzi scheme collapse")
+            self.add_transgression(15, 15)
 
         elif r == 21 and not self.oil_spill:
             self.oil_spill = True
             self.money -= 50000000
             self.show_event("Oil Spill!", "Your private tanker had a 'minor' accident off the coast. The ocean is now 40% oil. Pay $50,000,000 in cleanup costs.")
             self.apply_market_effect(["Energy"], 0.88, 5, "Oil spill disaster")
+            self.add_transgression(12, 14)
 
         elif r == 22:
             self.money -= 10000000
             self.show_event("Crypto Rug Pull!", "You launched 'RichCoin' and immediately rug pulled it. Unfortunately you forgot you also invested $10,000,000 in it. Classic.")
             self.apply_market_effect(["Finance", "AI"], 0.93, 2, "Crypto collapse")
+            self.add_transgression(8, 8)
 
         elif r == 23:
             if "media" in self.owned_assets:
@@ -170,12 +178,14 @@ class EventsMixin:
             self.money -= 30000000
             self.show_event("Carbon Credits Scam!", "You sold fake carbon credits to 47 Fortune 500 companies. The EPA found out. Lose $30,000,000. The planet is still dying.")
             self.apply_market_effect(["Energy"], 0.91, 4, "Environmental fraud")
+            self.add_transgression(10, 12)
 
         elif r == 26 and not self.insider_trading:
             self.insider_trading = True
             self.money -= 35000000
             self.show_event("Insider Trading!", "You got caught insider trading NVIDIA stock right before earnings. The SEC fined you $35,000,000. Worth it honestly.")
             self.apply_market_effect(["AI", "Finance"], 0.89, 4, "Insider trading scandal")
+            self.add_transgression(12, 10)
 
         elif r == 27:
             if "army" in self.owned_assets:
@@ -184,11 +194,13 @@ class EventsMixin:
                 self.money -= 15_000_000
                 self.show_event("Hitman Mishap!", "You hired a hitman to deal with a business rival. He was an undercover FBI agent. Pay $15,000,000 in legal fees. Your rival is fine.")
                 self.apply_market_effect(["Defense"], 0.93, 2, "Criminal investigation")
+            self.add_transgression(15, 10)
 
         elif r == 28:
             self.money -= 20000000
             self.show_event("Casino Money Laundering!", "You used a casino to launder money. Casinos report large cash transactions. The IRS called. Lose $20,000,000.")
             self.apply_market_effect(["Finance", "Entertainment"], 0.91, 3, "Money laundering probe")
+            self.add_transgression(10, 8)
 
         elif r == 29:
             self.money -= 10000000
@@ -218,6 +230,7 @@ class EventsMixin:
             self.show_event("Climate Lawsuit!", "You lobbied against climate regulations for 20 years. 47 Pacific island nations just sued you. Lose $15,000,000. Oops.")
             self.apply_market_effect(["Energy"], 0.92, 3, "Climate litigation")
             self.apply_market_effect(["Retail"], 0.96, 2, "Consumer backlash")
+            self.add_transgression(10, 12)
 
         elif r == 34 and not self.pandemic:
             self.pandemic = True

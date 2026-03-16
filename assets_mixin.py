@@ -66,11 +66,11 @@ ASSETS = [
         "id":      "island",
         "icon":    "🏝️",
         "name":    "Private Island",
-        "desc":    "Sovereign territory. Cuba can't touch you.",
-        "cost":    30_000_000,
-        "upkeep":  300_000,
+        "desc":    "Browse 18 real private islands worldwide. Each earns daily income.",
+        "cost":    0,
+        "upkeep":  0,
         "income":  0,
-        "special": "cuba_immune",
+        "special": "island_map",
     },
     {
         "id":      "media",
@@ -160,8 +160,13 @@ class AssetsMixin:
         canvas.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
-        canvas.bind_all("<MouseWheel>",
-            lambda e: canvas.yview_scroll(-1*(e.delta//120), "units"))
+        def _on_scroll(e):
+            try:
+                canvas.yview_scroll(-1*(e.delta//120), "units")
+            except tk.TclError:
+                pass
+        canvas.bind_all("<MouseWheel>", _on_scroll)
+        win.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         self._asset_buy_btns = {}
 
@@ -192,17 +197,26 @@ class AssetsMixin:
                  bg="#1e2130", fg="#888888", anchor="w", wraplength=280,
                  justify="left").pack(anchor="w")
 
-        stat_line = f"Cost: ${asset['cost']:,}   Upkeep: ${asset['upkeep']:,}/day"
-        if asset["income"]:
-            stat_line += f"   Income: +${asset['income']:,}/day"
-        tk.Label(info, text=stat_line, font=("Arial", 7),
-                 bg="#1e2130", fg="#555577", anchor="w").pack(anchor="w", pady=(2, 0))
+        if asset["special"] != "island_map":
+            stat_line = f"Cost: ${asset['cost']:,}   Upkeep: ${asset['upkeep']:,}/day"
+            if asset["income"]:
+                stat_line += f"   Income: +${asset['income']:,}/day"
+            tk.Label(info, text=stat_line, font=("Arial", 7),
+                     bg="#1e2130", fg="#555577", anchor="w").pack(anchor="w", pady=(2, 0))
 
-        # Buy / Owned button
+        # Island entry gets a permanent Browse button
         right = tk.Frame(row, bg="#1e2130")
         right.pack(side="right")
 
-        if owned:
+        if asset["special"] == "island_map":
+            n = len(self.owned_islands)
+            lbl = f"Browse  ({n} owned)" if n else "Browse"
+            tk.Button(right, text=lbl,
+                      font=("Arial", 10, "bold"), bg="#ff9900", fg="white",
+                      relief="flat", padx=14, pady=5,
+                      command=lambda w=win: [w.destroy(), self.open_island_map()]
+                      ).pack()
+        elif owned:
             tk.Label(right, text="OWNED", font=("Arial", 9, "bold"),
                      bg="#1e2130", fg="#00ff90").pack()
         else:
@@ -223,6 +237,7 @@ class AssetsMixin:
         self.money -= asset["cost"]
         self.market.money = self.money
         self.owned_assets.add(asset["id"])
+        self.add_happiness(max(3, min(20, asset["cost"] // 5_000_000)))
         self.update_status()
         self.log_event(f"Purchased {asset['icon']} {asset['name']} for ${asset['cost']:,}")
 
