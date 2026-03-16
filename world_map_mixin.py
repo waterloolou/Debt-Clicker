@@ -186,6 +186,10 @@ class WorldMapMixin:
         tk.Label(header, text="WORLD RESOURCE OPERATIONS",
                  font=("Impact", 20), bg=CLR_OCEAN, fg="#ffaa00").pack(side="left")
 
+        alliance_text = f"Alliance: {self.alliance} ({self.alliance_days}d)" if self.alliance else "Alliance: None"
+        tk.Label(header, text=alliance_text,
+                 font=("Arial", 9), bg=CLR_OCEAN, fg="#4499ff").pack(side="right", padx=10)
+
         sel = tk.Frame(header, bg=CLR_OCEAN)
         sel.pack(side="right")
         tk.Label(sel, text="Resource:", font=("Arial", 10),
@@ -269,6 +273,13 @@ class WorldMapMixin:
             dot.pack(side="left", padx=(10, 3))
             tk.Label(leg, text=label, font=("Arial", 8),
                      bg=CLR_OCEAN, fg="#888").pack(side="left", padx=(0, 14))
+        # Rival legend entries
+        for rival_name, rival in getattr(self, "rivals", {}).items():
+            dot = tk.Canvas(leg, width=12, height=12, bg=CLR_OCEAN, highlightthickness=0)
+            dot.create_oval(1, 1, 11, 11, fill=rival["color"], outline="#555")
+            dot.pack(side="left", padx=(10, 3))
+            tk.Label(leg, text=rival_name, font=("Arial", 8),
+                     bg=CLR_OCEAN, fg=rival["color"]).pack(side="left", padx=(0, 14))
 
     # =========================================================
     # RENDER MAP
@@ -426,6 +437,22 @@ class WorldMapMixin:
         tk.Label(popup, text=f"{resource} — {info['reserves']}",
                  font=("Arial", 9, "italic"), bg="#0e1117", fg="#666").pack()
 
+        # Check if rival controls this country
+        rival = self.is_rival_controlled(resource, name)
+        if rival:
+            rival_color = self.rivals[rival]["color"]
+            tk.Label(popup, text=f"Controlled by rival: {rival}",
+                     font=("Arial", 9, "bold"), bg="#0e1117", fg=rival_color).pack()
+            tk.Button(popup, text=f"Buy Out {rival} (2x cost)",
+                      font=("Arial", 9), bg="#2a1a3a", fg=rival_color,
+                      relief="flat", padx=10, pady=4,
+                      command=lambda: [self.buyout_rival(resource, name, rival), popup.destroy()]
+                      ).pack(pady=4)
+            tk.Button(popup, text="Cancel", bg="#1e2130", fg="#aaaaaa",
+                      relief="flat", padx=16, pady=5,
+                      command=popup.destroy).pack(pady=4)
+            return
+
         for label, val in [
             ("Base Income",   f"${info['income']:,}/day"),
             ("Duration",      f"{info['days']} days"),
@@ -482,7 +509,8 @@ class WorldMapMixin:
 
     def _execute_action(self, name, info, resource, action_name, popup, ax, canvas):
         act    = ACTIONS[action_name]
-        cost   = int(info["action_cost"] * act["cost_mult"])
+        discount = self.get_alliance_discount(name)
+        cost   = int(info["action_cost"] * act["cost_mult"] * discount)
         income = int(info["income"]      * act["income_mult"])
         days   = int(info["days"]        * act["days_mult"])
 
@@ -508,6 +536,12 @@ class WorldMapMixin:
             f"{act['tag']} {act['past']} {name}!  "
             f"Cost: ${cost:,}  |  Income: ${income:,}/day x {days} days"
         )
+
+        # Chance of sanction for bombing (not coup)
+        if action_name == "Bomb":
+            import random
+            if random.random() < 0.3:
+                self.apply_sanction(name, days=random.randint(5, 15))
 
         mkt_mult = 1.06 if action_name == "Bomb" else 1.04
         for cat in RESOURCE_DATA[resource]["market"]:

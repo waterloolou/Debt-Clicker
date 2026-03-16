@@ -155,6 +155,23 @@ class ScreensMixin:
                       padx=14, pady=5,
                       command=cmd).pack(side="left", padx=6)
 
+        btn_frame2 = tk.Frame(frame, bg="#0e1117")
+        btn_frame2.pack(pady=(0, 4))
+
+        for text, cmd in [
+            ("Lobby",       self.open_lobby),
+            ("Black Market",self.open_black_market),
+            ("Debt",        self.open_debt_window),
+            ("Rivals",      self.open_rivals_window),
+            ("Net Worth",   self.open_net_worth_graph),
+            ("Alliance",    self.open_alliance_window),
+        ]:
+            tk.Button(btn_frame2, text=text,
+                      font=("Arial", 9), bg="#151820", fg="#aaaaaa",
+                      activebackground="#2e3140", relief="flat",
+                      padx=10, pady=4,
+                      command=cmd).pack(side="left", padx=4)
+
         # ── Stat bars ──────────────────────────────────────────
         bars_frame = tk.Frame(frame, bg="#0e1117")
         bars_frame.pack(fill="x", padx=12, pady=(0, 4))
@@ -182,7 +199,30 @@ class ScreensMixin:
         self._bar_opinion_fill, self._bar_opinion_lbl = _make_bar(bars_frame, "Public Opinion", 75, "#4499ff")
         self._bar_trans_fill,  self._bar_trans_lbl  = _make_bar(bars_frame, "Transgressions",   0, "#ff9900")
 
-        self.log = scrolledtext.ScrolledText(frame, height=26, state="disabled",
+        # Infamy + Wanted status line
+        status2 = tk.Frame(frame, bg="#0e1117")
+        status2.pack(fill="x", padx=12, pady=(0, 2))
+        self._infamy_label  = tk.Label(status2, text="TIER 0: Nobody",
+                                        font=("Arial", 7, "bold"), bg="#0e1117", fg="#555")
+        self._infamy_label.pack(side="left")
+        self._wanted_label  = tk.Label(status2, text="Wanted: Clean",
+                                        font=("Arial", 7, "bold"), bg="#0e1117", fg="#555")
+        self._wanted_label.pack(side="right")
+
+        # News ticker
+        ticker_frame = tk.Frame(frame, bg="#1a1a0a", height=18)
+        ticker_frame.pack(fill="x", padx=0, pady=0)
+        ticker_frame.pack_propagate(False)
+        self._ticker_label = tk.Label(ticker_frame, text="  DEBT CLICKER NEWS  |  Your empire begins its descent...  ",
+                                       font=("Consolas", 8), bg="#1a1a0a", fg="#ffaa00",
+                                       anchor="w")
+        self._ticker_label.pack(side="left", fill="y")
+        self._ticker_text = "  DEBT CLICKER NEWS  |  Your empire begins its descent...  "
+        self._ticker_pos  = 0
+        self._ticker_queue = []
+        self._scroll_ticker()
+
+        self.log = scrolledtext.ScrolledText(frame, height=20, state="disabled",
                                              bg="#0a0d13", fg="#cccccc",
                                              font=("Consolas", 9), relief="flat",
                                              insertbackground="white")
@@ -232,6 +272,7 @@ class ScreensMixin:
         return frame
 
     def _show_end_screen(self):
+        self._save_legacy()
         rank, total = self._save_score()
         self.end_name_label.config(text=f"{self.username}'s empire has fallen.")
         self.end_days_label.config(text=f"Survived {self.days} days")
@@ -391,3 +432,51 @@ class ScreensMixin:
         self._bar_trans_fill.place(relwidth=max(0.001, min(1, t / 100)))
         self._bar_trans_fill.config(bg=tc)
         self._bar_trans_lbl.config(text=str(int(t)), fg=tc)
+
+        # Update infamy + wanted labels
+        if hasattr(self, "_infamy_label"):
+            tier, title = self.get_infamy_tier()
+            colors = ["#555", "#ffaa00", "#ff6600", "#ff2222", "#cc0000", "#880000"]
+            self._infamy_label.config(text=f"TIER {tier}: {title}", fg=colors[tier])
+        if hasattr(self, "_wanted_label"):
+            labels = ["Clean", "Media Attention", "Senate Investigation", "FBI Target", "Interpol Red Notice"]
+            wcolors = ["#555", "#ffdd44", "#ff9900", "#ff4444", "#ff0000"]
+            wl = getattr(self, "wanted_level", 0)
+            self._wanted_label.config(text=f"Wanted: {labels[wl]}", fg=wcolors[wl])
+
+    # =========================================================
+    # NEWS TICKER
+    # =========================================================
+
+    def _scroll_ticker(self):
+        if not hasattr(self, "_ticker_label"):
+            return
+        try:
+            self._ticker_label.winfo_exists()
+        except Exception:
+            return
+        try:
+            if not self._ticker_label.winfo_exists():
+                return
+        except Exception:
+            return
+
+        # Append queued items to ticker text
+        while self._ticker_queue:
+            self._ticker_text += "   |   " + self._ticker_queue.pop(0)
+
+        # Scroll: show a 60-char window into the text
+        display = (self._ticker_text + "   ") * 2
+        pos = self._ticker_pos % len(self._ticker_text + "   ")
+        snippet = display[pos:pos+80]
+        try:
+            self._ticker_label.config(text=snippet)
+        except Exception:
+            return
+        self._ticker_pos += 1
+        self.root.after(80, self._scroll_ticker)
+
+    def _add_ticker(self, text):
+        """Add a headline to the news ticker queue."""
+        if hasattr(self, "_ticker_queue"):
+            self._ticker_queue.append(text)

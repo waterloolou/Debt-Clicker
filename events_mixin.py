@@ -12,6 +12,13 @@ class EventsMixin:
     def random_events(self):
         r = random.randint(1, 70)
 
+        # Senate immunity blocks one bad event
+        if getattr(self, "lobby_immunity", False) and r not in (4, 10, 18):  # skip good events
+            self.lobby_immunity = False
+            self.log_event("Senate Immunity activated — bad event blocked!")
+            self._add_ticker("POLITICS: Senate intervention blocks investigation...")
+            return
+
         if r == 1 and self.family:
             self.family = False
             self.money /= 2

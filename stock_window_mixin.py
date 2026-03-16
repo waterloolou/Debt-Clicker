@@ -118,6 +118,13 @@ class StockWindowMixin:
                       command=lambda s=name: self.buy_stock(s)).pack(side="left", padx=2)
             tk.Button(row, text="Sell", bg="#1e2130", fg="white", relief="flat",
                       command=lambda s=name: self.sell_stock(s)).pack(side="left", padx=2)
+            if data["shares"] > 0:
+                tk.Button(row, text="Pump", bg="#004400", fg="#00ff90", relief="flat",
+                          font=("Arial", 8),
+                          command=lambda s=name: self.pump_stock(s)).pack(side="left", padx=1)
+                tk.Button(row, text="Dump", bg="#440000", fg="#ff4444", relief="flat",
+                          font=("Arial", 8),
+                          command=lambda s=name: self.dump_stock(s)).pack(side="left", padx=1)
 
     def _stock_text(self, name, data):
         return f"{name}   ${data['price']:,.2f}   Shares: {data['shares']}"
@@ -154,6 +161,47 @@ class StockWindowMixin:
         result = self.market.sell_stock(name, 1)
         self.money = self.market.money
         self.log_event(result)
+        self.update_status()
+        self.refresh_market()
+
+    def pump_stock(self, name):
+        """Spend $5M to artificially inflate a stock you own."""
+        cost = 5_000_000
+        if self.money < cost:
+            self.log_event(f"Need ${cost:,} to pump {name}")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        data = self.market.stocks[name]
+        data["price"] *= 1.25
+        data["history"].append(data["price"])
+        cat = data.get("category", "Custom")
+        self.apply_market_effect([cat], 1.12, 3, f"Pump: {name}")
+        self.add_transgression(8, 5)
+        self.log_event(f"PUMP: Inflated {name} by 25%. Cost ${cost:,}. Transgression +8.")
+        self._add_ticker(f"MARKETS: Unusual volume spike detected in {name}...")
+        self.update_status()
+        self.refresh_market()
+
+    def dump_stock(self, name):
+        """Sell all shares at 1.5x price, then crash the stock."""
+        data = self.market.stocks[name]
+        shares = data["shares"]
+        if shares <= 0:
+            self.log_event(f"No shares of {name} to dump")
+            return
+        sale_price = data["price"] * 1.5
+        proceeds = int(sale_price * shares)
+        self.money += proceeds
+        self.market.money = self.money
+        data["shares"] = 0
+        data["price"] *= 0.55  # crash by 45%
+        data["history"].append(data["price"])
+        cat = data.get("category", "Custom")
+        self.apply_market_effect([cat], 0.85, 4, f"Dump: {name}")
+        self.add_transgression(12, 8)
+        self.log_event(f"DUMP: Sold {shares} shares of {name} for ${proceeds:,} (1.5x). Stock crashed.")
+        self._add_ticker(f"MARKETS: {name} in freefall — mass selloff detected...")
         self.update_status()
         self.refresh_market()
 
