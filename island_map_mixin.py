@@ -140,6 +140,16 @@ ISLANDS = [
         "desc":  "David Copperfield's island. Magic tricks not included.",
     },
     {
+        "name":    "Little Saint James",
+        "loc":     "U.S. Virgin Islands",
+        "lat":  18.30,  "lon": -64.83,
+        "price":  45_000_000,
+        "upkeep":    250_000,
+        "income":    600_000,
+        "desc":  "Epstein's infamous private island. Sold by the estate in 2023. "
+                 "Tunnels included. Previous owner not included.",
+    },
+    {
         "name":    "North Island",
         "loc":     "Seychelles",
         "lat":  -4.4,  "lon":  55.2,
@@ -290,7 +300,52 @@ class IslandMapMixin:
             canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=(4, 0))
             self._island_canvas = canvas
 
-            # Legend + owned count
+            # ── Zoom / pan state ──────────────────────────────────────────
+            _pan = {"active": False, "x0": 0.0, "y0": 0.0,
+                    "xlim": (-180, 180), "ylim": (-75, 80)}
+
+            def _zoom(event):
+                if event.inaxes != ax or event.xdata is None:
+                    return
+                xmin, xmax = ax.get_xlim()
+                ymin, ymax = ax.get_ylim()
+                scale = 0.70 if event.button == "up" else 1.43
+                xc, yc = event.xdata, event.ydata
+                ax.set_xlim(xc - (xc - xmin) * scale,
+                            xc + (xmax - xc) * scale)
+                ax.set_ylim(yc - (yc - ymin) * scale,
+                            yc + (ymax - yc) * scale)
+                canvas.draw_idle()
+
+            def _press(event):
+                if event.button == 3 and event.xdata is not None:
+                    _pan.update({"active": True,
+                                 "x0": event.xdata, "y0": event.ydata,
+                                 "xlim": ax.get_xlim(),
+                                 "ylim": ax.get_ylim()})
+
+            def _motion(event):
+                if _pan["active"] and event.xdata is not None:
+                    dx = event.xdata - _pan["x0"]
+                    dy = event.ydata - _pan["y0"]
+                    ax.set_xlim(_pan["xlim"][0] - dx, _pan["xlim"][1] - dx)
+                    ax.set_ylim(_pan["ylim"][0] - dy, _pan["ylim"][1] - dy)
+                    canvas.draw_idle()
+
+            def _release(event):
+                if event.button == 3:
+                    _pan["active"] = False
+
+            fig.canvas.mpl_connect("scroll_event",         _zoom)
+            fig.canvas.mpl_connect("button_press_event",   _press)
+            fig.canvas.mpl_connect("motion_notify_event",  _motion)
+            fig.canvas.mpl_connect("button_release_event", _release)
+            # Left-click island selection (button 1 only)
+            fig.canvas.mpl_connect(
+                "button_press_event",
+                lambda e: self._on_island_click(e, ax, canvas) if e.button == 1 else None)
+
+            # ── Legend + controls ─────────────────────────────────────────
             leg = tk.Frame(win, bg=_CLR_BG)
             leg.pack(pady=4)
             for color, label in [(_CLR_AVAIL, "Available"),
@@ -309,9 +364,32 @@ class IslandMapMixin:
                 font=("Arial", 8, "bold"), bg=_CLR_BG, fg="#00ff90")
             self._island_owned_lbl.pack(side="left", padx=(20, 0))
 
-            fig.canvas.mpl_connect(
-                "button_press_event",
-                lambda e: self._on_island_click(e, ax, canvas))
+            # Zoom shortcuts
+            def _reset_view():
+                ax.set_xlim(-180, 180)
+                ax.set_ylim(-75, 80)
+                canvas.draw_idle()
+
+            def _view_caribbean():
+                ax.set_xlim(-90, -55)
+                ax.set_ylim(10, 30)
+                canvas.draw_idle()
+
+            def _view_pacific():
+                ax.set_xlim(130, 200)
+                ax.set_ylim(-30, 25)
+                canvas.draw_idle()
+
+            btn_cfg = dict(font=("Arial", 8), bg="#1e2130", fg="#aaaaaa",
+                           relief="flat", padx=8, pady=3)
+            tk.Label(leg, text="  View:", font=("Arial", 8),
+                     bg=_CLR_BG, fg="#555").pack(side="left", padx=(16, 4))
+            tk.Button(leg, text="World",     command=_reset_view,     **btn_cfg).pack(side="left", padx=2)
+            tk.Button(leg, text="Caribbean", command=_view_caribbean, **btn_cfg).pack(side="left", padx=2)
+            tk.Button(leg, text="Pacific",   command=_view_pacific,   **btn_cfg).pack(side="left", padx=2)
+            tk.Label(leg, text="  scroll=zoom  right-drag=pan",
+                     font=("Arial", 7), bg=_CLR_BG, fg="#333").pack(side="left", padx=(10, 0))
+
             win.protocol("WM_DELETE_WINDOW",
                          lambda: [plt.close(fig), win.destroy()])
 
@@ -398,10 +476,16 @@ class IslandMapMixin:
         if event.inaxes != ax or event.xdata is None:
             return
 
+        # Scale hit radius with current zoom level
+        xspan = ax.get_xlim()[1] - ax.get_xlim()[0]
+        scale = (xspan / 360.0) ** 2   # shrinks as you zoom in
+        gl_thresh  = max(4,  64  * scale)
+        isl_thresh = max(1,  16  * scale)
+
         # Check Greenland first (large target)
         gl = GREENLAND
         gl_dist = (event.xdata - gl["lon"])**2 + (event.ydata - gl["lat"])**2
-        if gl_dist < 64:
+        if gl_dist < gl_thresh:
             self._show_greenland_popup(ax, canvas)
             return
 
@@ -413,7 +497,7 @@ class IslandMapMixin:
                 best_dist = dist
                 best = isl
 
-        if best and best_dist < 16:
+        if best and best_dist < isl_thresh:
             self._show_island_popup(best, ax, canvas)
 
     # =========================================================

@@ -86,11 +86,21 @@ class ScreensMixin:
                                     bg="#0e1117", fg="#ff4444")
         self.start_error.pack()
 
-        tk.Button(frame, text="START GAME",
+        # ── Single-player / Multiplayer buttons ───────────────────────────
+        game_btn_row = tk.Frame(frame, bg="#0e1117")
+        game_btn_row.pack(pady=16)
+
+        tk.Button(game_btn_row, text="Single Player",
                   font=("Arial", 13, "bold"), bg="#ff2222", fg="white",
                   activebackground="#cc0000", relief="flat",
-                  padx=30, pady=8,
-                  command=self._on_start_clicked).pack(pady=16)
+                  padx=22, pady=8,
+                  command=self._on_start_clicked).pack(side="left", padx=8)
+
+        tk.Button(game_btn_row, text="Multiplayer",
+                  font=("Arial", 12), bg="#1e4080", fg="white",
+                  activebackground="#2a5090", relief="flat",
+                  padx=22, pady=8,
+                  command=self._on_multiplayer_clicked).pack(side="left", padx=8)
 
         bottom_row = tk.Frame(frame, bg="#0e1117")
         bottom_row.pack(pady=(0, 0))
@@ -286,6 +296,27 @@ class ScreensMixin:
         self.show_screen("game")
         self.start_game()
 
+    _MP_SUPERPOWERS = {"United States of America", "China", "Russia"}
+
+    def _on_multiplayer_clicked(self):
+        """Validate name/country then open the multiplayer lobby."""
+        name = self.username_entry.get().strip()
+        if not name:
+            self.start_error.config(text="Please enter a name.")
+            return
+        country = self.country_var.get()
+        if not country:
+            self.start_error.config(text="Please select a country.")
+            return
+        if country not in self._MP_SUPERPOWERS:
+            self.start_error.config(
+                text="Multiplayer: you must play as USA, China or Russia.")
+            return
+        self.start_error.config(text="")
+        self.username = name
+        self.country  = country
+        self.open_multiplayer_lobby()
+
     # =========================================================
     # GAME SCREEN
     # =========================================================
@@ -335,6 +366,8 @@ class ScreensMixin:
             ("Rivals",      self.open_rivals_window),
             ("Net Worth",   self.open_net_worth_graph),
             ("Alliance",    self.open_alliance_window),
+            ("💬 Chat",     self.open_chat_window),
+            ("⚔️ War Room", self.open_war_room),
         ]:
             tk.Button(btn_frame2, text=text,
                       font=("Arial", 9), bg="#151820", fg="#aaaaaa",
@@ -404,33 +437,82 @@ class ScreensMixin:
     # END SCREEN
     # =========================================================
 
+    # Maps death cause → (title, subtitle, accent_color, icon)
+    _END_THEMES = {
+        "broke": (
+            "YOUR EMPIRE\nHAS COLLAPSED",
+            "The banks took everything.\nYou're left with nothing but debt and regret.",
+            "#ff2222", "💸",
+        ),
+        "happiness": (
+            "YOU LOST THE\nWILL TO LIVE",
+            "All the money in the world\ncouldn't fill the void. You simply... stopped.",
+            "#ff9900", "😶",
+        ),
+        "opinion": (
+            "HUNTED BY\nYOUR OWN PEOPLE",
+            "The mob came for you.\nYour name became a curse. Nowhere to hide.",
+            "#ff4466", "📉",
+        ),
+        "transgressions": (
+            "BROUGHT TO\nJUSTICE",
+            "Every crime. Every cover-up. Every lie.\nThe bill finally came due. Life in prison.",
+            "#cc00ff", "⛓️",
+        ),
+        "roulette": (
+            "BANG.",
+            "You pulled the trigger.\nOne bullet. That was the one.",
+            "#ff2222", "🔫",
+        ),
+    }
+
     def _build_end_screen(self):
         frame = tk.Frame(self.root, bg="#0e1117")
 
-        tk.Label(frame, text="YOUR EMPIRE\nHAS COLLAPSED",
-                 font=("Impact", 36), bg="#0e1117", fg="#ff2222",
-                 justify="center").pack(pady=(80, 20))
+        self._end_top_bar   = tk.Frame(frame, bg="#ff2222", height=6)
+        self._end_top_bar.pack(fill="x")
+
+        self.end_icon_label = tk.Label(frame, text="💸",
+                                       font=("Arial", 42), bg="#0e1117")
+        self.end_icon_label.pack(pady=(24, 0))
+
+        self.end_title_label = tk.Label(frame, text="YOUR EMPIRE\nHAS COLLAPSED",
+                                        font=("Impact", 34), bg="#0e1117", fg="#ff2222",
+                                        justify="center")
+        self.end_title_label.pack(pady=(6, 4))
+
+        self.end_flavor_label = tk.Label(frame, text="",
+                                         font=("Arial", 10), bg="#0e1117", fg="#888888",
+                                         justify="center")
+        self.end_flavor_label.pack(pady=(0, 14))
+
+        tk.Frame(frame, bg="#1e2130", height=1).pack(fill="x", padx=60)
 
         self.end_name_label = tk.Label(frame, text="",
-                                       font=("Arial", 14), bg="#0e1117", fg="white")
-        self.end_name_label.pack(pady=4)
+                                       font=("Arial", 13), bg="#0e1117", fg="white")
+        self.end_name_label.pack(pady=(12, 2))
 
         self.end_days_label = tk.Label(frame, text="",
                                        font=("Arial", 20, "bold"), bg="#0e1117", fg="#00ff90")
-        self.end_days_label.pack(pady=4)
+        self.end_days_label.pack(pady=2)
+
+        self.end_infamy_label = tk.Label(frame, text="",
+                                         font=("Arial", 10, "italic"), bg="#0e1117", fg="#aaaaaa")
+        self.end_infamy_label.pack(pady=2)
 
         self.end_rank_label = tk.Label(frame, text="",
-                                       font=("Arial", 11), bg="#0e1117", fg="#aaaaaa")
-        self.end_rank_label.pack(pady=8)
+                                       font=("Arial", 10), bg="#0e1117", fg="#555555")
+        self.end_rank_label.pack(pady=4)
 
         btn_frame = tk.Frame(frame, bg="#0e1117")
-        btn_frame.pack(pady=20)
+        btn_frame.pack(pady=18)
 
-        tk.Button(btn_frame, text="Play Again",
+        self._end_play_btn = tk.Button(btn_frame, text="Play Again",
                   font=("Arial", 12, "bold"), bg="#ff2222", fg="white",
                   activebackground="#cc0000", relief="flat",
                   padx=22, pady=8,
-                  command=self._play_again).pack(side="left", padx=12)
+                  command=self._play_again)
+        self._end_play_btn.pack(side="left", padx=12)
 
         tk.Button(btn_frame, text="Leaderboard",
                   font=("Arial", 12), bg="#1e2130", fg="white",
@@ -439,20 +521,51 @@ class ScreensMixin:
                   command=lambda: [self._populate_leaderboard(),
                                    self.show_screen("leaderboard")]).pack(side="left", padx=12)
 
+        self._end_bot_bar = tk.Frame(frame, bg="#ff2222", height=6)
+        self._end_bot_bar.pack(fill="x", side="bottom")
+
         return frame
 
     def _show_end_screen(self):
         self._save_legacy()
         rank, total = self._save_score()
-        self.end_name_label.config(text=f"{self.username}'s empire has fallen.")
+
+        cause = getattr(self, "death_cause", "broke")
+        title, flavor, color, icon = self._END_THEMES.get(cause, self._END_THEMES["broke"])
+
+        # Apply theme colors
+        self._end_top_bar.config(bg=color)
+        self._end_bot_bar.config(bg=color)
+        self._end_play_btn.config(bg=color, activebackground=color)
+        self.end_icon_label.config(text=icon)
+        self.end_title_label.config(text=title, fg=color)
+        self.end_flavor_label.config(text=flavor)
+
+        # Infamy title
+        _, infamy_name = self.get_infamy_tier()
+        self.end_name_label.config(
+            text=f"{self.username}  —  \"{infamy_name}\"")
         self.end_days_label.config(text=f"Survived {self.days} days")
+        self.end_infamy_label.config(
+            text=f"Country: {getattr(self, 'country', '—')}  |  "
+                 f"Transgressions: {self.transgressions}  |  "
+                 f"Happiness: {int(self.happiness)}  |  "
+                 f"Opinion: {int(self.public_opinion)}")
         if rank:
-            self.end_rank_label.config(text=f"#{rank} on the leaderboard out of {total} players")
+            self.end_rank_label.config(
+                text=f"#{rank} on the leaderboard out of {total} players")
         else:
             self.end_rank_label.config(text="")
+
         self.show_screen("end")
 
     def _play_again(self):
+        # Disconnect from any active multiplayer session
+        if getattr(self, "net_client", None) and self.net_client.connected:
+            self.net_client.disconnect()
+        self.net_client = None
+        self.is_multiplayer = False
+
         self.log.config(state="normal")
         self.log.delete("1.0", tk.END)
         self.log.config(state="disabled")

@@ -1,6 +1,29 @@
 import tkinter as tk
 import random
 import math
+import threading
+try:
+    import winsound
+    _HAS_WINSOUND = True
+except ImportError:
+    _HAS_WINSOUND = False
+
+
+def _play_sound(kind="win"):
+    """Play a non-blocking win / jackpot / loss sound via winsound (Windows only)."""
+    if not _HAS_WINSOUND:
+        return
+    def _run():
+        if kind == "jackpot":
+            for f, d in [(880,80),(1100,80),(1320,80),(1100,60),(1320,60),(1760,300)]:
+                winsound.Beep(f, d)
+        elif kind == "win":
+            for f, d in [(880,80),(1100,80),(1320,200)]:
+                winsound.Beep(f, d)
+        elif kind == "loss":
+            for f, d in [(440,120),(330,200)]:
+                winsound.Beep(f, d)
+    threading.Thread(target=_run, daemon=True).start()
 
 
 class CasinoMixin:
@@ -26,7 +49,7 @@ class CasinoMixin:
         games = [
             ("🔫", "Russian\nRoulette", "1-in-6 chance of death.\nSurvive to double your bet.", self._open_russian_roulette),
             ("🎰", "Slot\nMachine",    "Spin 3 reels.\nMatch symbols to win big.",           self._open_slot_machine),
-            ("🂡", "Poker",            "5-card draw.\nBest hand takes the pot.",              self._open_poker),
+            ("🂡", "Poker",            "5-card draw.\nBet first, then see your hand.",        self._open_poker),
         ]
 
         for icon, title, desc, cmd in games:
@@ -183,6 +206,7 @@ class CasinoMixin:
             self._rr_result.config(text="💀 BANG. You're dead.", fg="#ff2222")
             self.log_event("You lost at Russian Roulette. RIP.")
             self.running = False
+            self.death_cause = "roulette"
             def _die():
                 win.destroy()
                 self._show_end_screen()
@@ -197,38 +221,105 @@ class CasinoMixin:
             win.after(2000, win.destroy)
 
     # =========================================================
-    # SLOT MACHINE
+    # SLOT MACHINE  (colored canvas symbols + win flash + sound)
     # =========================================================
 
-    SLOT_SYMBOLS = ["🍒", "🍋", "🍊", "🍇", "💎", "7️⃣"]
+    SLOT_SYMBOLS = ["cherry", "lemon", "orange", "grapes", "diamond", "seven"]
     SLOT_PAYOUTS = {
-        ("7️⃣", "7️⃣", "7️⃣"): ("JACKPOT 777!", 100),
-        ("💎", "💎", "💎"): ("Triple Diamond!", 50),
-        ("🍒", "🍒", "🍒"): ("Triple Cherry!", 10),
-        ("🍋", "🍋", "🍋"): ("Triple Lemon!",  10),
-        ("🍊", "🍊", "🍊"): ("Triple Orange!", 10),
-        ("🍇", "🍇", "🍇"): ("Triple Grapes!", 10),
+        ("seven",   "seven",   "seven"):   ("JACKPOT 777!",   100),
+        ("diamond", "diamond", "diamond"): ("Triple Diamond!", 50),
+        ("cherry",  "cherry",  "cherry"):  ("Triple Cherry!",  10),
+        ("lemon",   "lemon",   "lemon"):   ("Triple Lemon!",   10),
+        ("orange",  "orange",  "orange"):  ("Triple Orange!",  10),
+        ("grapes",  "grapes",  "grapes"):  ("Triple Grapes!",  10),
     }
+
+    def _draw_slot_symbol(self, canvas, symbol):
+        """Draw a colorful slot symbol on a 90×110 canvas."""
+        canvas.delete("all")
+        W, H = 90, 110
+        cx, cy = W // 2, H // 2
+
+        if symbol == "seven":
+            canvas.create_rectangle(4, 4, W-4, H-4, fill="#1a0000", outline="#ff2222", width=2)
+            canvas.create_text(cx, cy+4, text="7", font=("Impact", 52, "bold"),
+                               fill="#ff2222")
+            canvas.create_text(cx, cy+4, text="7", font=("Impact", 52, "bold"),
+                               fill="#ff2222")
+
+        elif symbol == "diamond":
+            pts = [cx, 12, W-10, cy, cx, H-12, 10, cy]
+            canvas.create_polygon(pts, fill="#00ccff", outline="#aaeeff", width=2)
+            # inner highlight
+            inner = [cx, 24, W-22, cy, cx, H-24, 22, cy]
+            canvas.create_polygon(inner, fill="#66eeff", outline="", stipple="")
+            canvas.create_text(cx, cy, text="◆", font=("Arial", 18, "bold"), fill="white")
+
+        elif symbol == "cherry":
+            # stems
+            canvas.create_line(cx-12, 38, cx-2, 22, fill="#226600", width=2)
+            canvas.create_line(cx+12, 38, cx+2, 22, fill="#226600", width=2)
+            canvas.create_line(cx-2, 22, cx+2, 22, fill="#226600", width=2)
+            # left cherry
+            canvas.create_oval(cx-28, 38, cx+4, H-18, fill="#cc0000", outline="#ff4444", width=2)
+            canvas.create_oval(cx-24, 40, cx-8, 52, fill="#ff6666", outline="")
+            # right cherry
+            canvas.create_oval(cx-4, 38, cx+28, H-18, fill="#cc0000", outline="#ff4444", width=2)
+            canvas.create_oval(cx+4, 40, cx+20, 52, fill="#ff6666", outline="")
+
+        elif symbol == "lemon":
+            canvas.create_oval(14, 20, W-14, H-20, fill="#eecc00", outline="#ffee44", width=2)
+            # bumps
+            canvas.create_oval(cx-6, 14, cx+6, 26, fill="#ddbb00", outline="#ffee44", width=1)
+            canvas.create_oval(cx-6, H-26, cx+6, H-14, fill="#ddbb00", outline="#ffee44", width=1)
+            # shine
+            canvas.create_oval(22, 28, 40, 44, fill="#ffee88", outline="")
+
+        elif symbol == "orange":
+            canvas.create_oval(12, 14, W-12, H-14, fill="#ee7700", outline="#ffaa33", width=2)
+            # leaf
+            pts = [cx-4, 10, cx+14, 2, cx+8, 16]
+            canvas.create_polygon(pts, fill="#228800", outline="#44aa00", width=1)
+            # shine
+            canvas.create_oval(20, 22, 40, 40, fill="#ffcc77", outline="")
+
+        elif symbol == "grapes":
+            # leaf
+            canvas.create_oval(cx-14, 6, cx+14, 24, fill="#228822", outline="#44aa44", width=1)
+            # stem
+            canvas.create_line(cx, 20, cx, 30, fill="#664400", width=2)
+            # grape cluster – 3 rows
+            positions = [(cx, 38), (cx-14, 52), (cx+14, 52),
+                         (cx-7, 66), (cx+7, 66), (cx, 80)]
+            for gx, gy in positions:
+                canvas.create_oval(gx-11, gy-11, gx+11, gy+11,
+                                   fill="#8800cc", outline="#cc66ff", width=1)
+                canvas.create_oval(gx-7, gy-9, gx-1, gy-3, fill="#cc88ff", outline="")
 
     def _open_slot_machine(self):
         win = tk.Toplevel(self.root)
         win.title("Slot Machine")
         win.configure(bg="#0e1117")
-        win.geometry("420x480")
+        win.geometry("440x520")
         win.resizable(False, False)
+        self._slot_win = win
 
         tk.Label(win, text="🎰 Slot Machine",
                  font=("Impact", 22), bg="#0e1117", fg="#ffdd44").pack(pady=(18, 4))
 
-        reel_frame = tk.Frame(win, bg="#222", relief="ridge", bd=4)
-        reel_frame.pack(pady=12)
+        self._slot_reel_frame = tk.Frame(win, bg="#ffdd44", relief="ridge", bd=4)
+        self._slot_reel_frame.pack(pady=12)
 
-        self._slot_labels = []
-        for _ in range(3):
-            lbl = tk.Label(reel_frame, text="🍒", font=("Arial", 48),
-                           bg="#111", width=3, relief="sunken", bd=2)
-            lbl.pack(side="left", padx=4, pady=8)
-            self._slot_labels.append(lbl)
+        inner = tk.Frame(self._slot_reel_frame, bg="#222")
+        inner.pack(padx=4, pady=4)
+
+        self._slot_canvases = []
+        for i in range(3):
+            c = tk.Canvas(inner, width=90, height=110,
+                          bg="#111", highlightthickness=2, highlightbackground="#444")
+            c.pack(side="left", padx=5, pady=6)
+            self._slot_canvases.append(c)
+            self._draw_slot_symbol(c, "cherry")
 
         bet_frame = tk.Frame(win, bg="#0e1117")
         bet_frame.pack(pady=8)
@@ -255,6 +346,10 @@ class CasinoMixin:
         except ValueError:
             self._slot_result.config(text="Invalid bet.", fg="#ff4444")
             return
+        max_bet = min(30_000_000, self.money * 0.20)
+        if bet > max_bet:
+            self._slot_result.config(text=f"Max bet: ${max_bet:,.0f} (20% of balance)", fg="#ff4444")
+            return
         if bet > self.money:
             self._slot_result.config(text="Not enough money.", fg="#ff4444")
             return
@@ -262,58 +357,82 @@ class CasinoMixin:
         self._slot_btn.config(state="disabled")
         self._slot_result.config(text="Spinning...", fg="#aaaaaa")
         final = [random.choice(self.SLOT_SYMBOLS) for _ in range(3)]
-        self._animate_slots(final, 0, 25, bet, win)
+        self._animate_slots(final, 0, 28, bet, win)
 
     def _animate_slots(self, final, step, total, bet, win):
         if step < total:
-            for lbl in self._slot_labels:
-                lbl.config(text=random.choice(self.SLOT_SYMBOLS))
-            delay = max(30, 80 - step * 2)
+            for c in self._slot_canvases:
+                self._draw_slot_symbol(c, random.choice(self.SLOT_SYMBOLS))
+            delay = max(30, 90 - step * 2)
             self.root.after(delay, lambda: self._animate_slots(final, step+1, total, bet, win))
         else:
-            for lbl, sym in zip(self._slot_labels, final):
-                lbl.config(text=sym)
+            for c, sym in zip(self._slot_canvases, final):
+                self._draw_slot_symbol(c, sym)
             self._evaluate_slots(tuple(final), bet)
             self._slot_btn.config(state="normal")
 
     def _evaluate_slots(self, result, bet):
+        is_jackpot = False
         if result in self.SLOT_PAYOUTS:
             label, mult = self.SLOT_PAYOUTS[result]
             winnings = bet * mult
             self.money += winnings
-            self._slot_result.config(text=f"{label}  +${winnings:,.0f}", fg="#ffdd44")
+            is_jackpot = mult >= 50
+            color = "#ffdd44" if mult < 50 else "#ff2222"
+            self._slot_result.config(text=f"{label}  +${winnings:,.0f}", fg=color)
             self.log_event(f"Slots: {label} +${winnings:,.0f}")
+            _play_sound("jackpot" if is_jackpot else "win")
+            self._flash_reels(6, is_jackpot)
         elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
             winnings = bet * 2
             self.money += winnings
             self._slot_result.config(text=f"Two of a kind! +${winnings:,.0f}", fg="#00ff90")
             self.log_event(f"Slots: two of a kind +${winnings:,.0f}")
+            _play_sound("win")
+            self._flash_reels(4, False)
         else:
             self.money -= bet
             self._slot_result.config(text=f"No match. Lost ${bet:,.0f}", fg="#ff4444")
             self.log_event(f"Slots: no match, lost ${bet:,.0f}")
+            _play_sound("loss")
         self.market.money = self.money
         self.update_status()
 
+    def _flash_reels(self, times, jackpot):
+        colors = (["#ffdd44", "#ff2222"] * (times * 2)) if jackpot else (["#ffdd44", "#00ff90"] * times)
+        colors += ["#ffdd44"]   # end on gold
+
+        def _step(idx=0):
+            try:
+                if idx >= len(colors):
+                    return
+                self._slot_reel_frame.config(bg=colors[idx])
+                delay = 80 if jackpot else 120
+                self.root.after(delay, lambda: _step(idx + 1))
+            except tk.TclError:
+                pass
+
+        _step()
+
     # =========================================================
-    # POKER (5-card draw)
+    # POKER (5-card draw)  —  Bet → Deal → Hold → Draw
     # =========================================================
 
     RANKS     = ['2','3','4','5','6','7','8','9','10','J','Q','K','A']
     SUITS     = ['♠','♥','♦','♣']
-    SUIT_COLORS = {'♠':'black','♣':'black','♥':'#cc0000','♦':'#cc0000'}
+    SUIT_COLORS = {'♠':'#222222','♣':'#222222','♥':'#cc0000','♦':'#cc0000'}
     RANK_VAL  = {r: i for i, r in enumerate(['2','3','4','5','6','7','8','9','10','J','Q','K','A'])}
 
     def _open_poker(self):
         win = tk.Toplevel(self.root)
         win.title("Poker - 5 Card Draw")
         win.configure(bg="#0e1117")
-        win.geometry("520x520")
+        win.geometry("520x560")
         win.resizable(False, False)
 
         tk.Label(win, text="🂡 5-Card Draw Poker",
                  font=("Impact", 22), bg="#0e1117", fg="#00ff90").pack(pady=(18, 4))
-        tk.Label(win, text="Click cards to HOLD them, then Draw.",
+        tk.Label(win, text="Set your bet → Deal → Hold cards → Draw",
                  font=("Arial", 9), bg="#0e1117", fg="#888").pack()
 
         pay_frame = tk.Frame(win, bg="#0e1117")
@@ -332,14 +451,16 @@ class CasinoMixin:
         self._poker_hand     = []
         self._poker_canvases = []
         self._poker_win      = win
+        self._poker_phase    = "bet"   # "bet" | "hold"
 
         for i in range(5):
             c = tk.Canvas(card_frame, width=72, height=100,
-                          bg="white", highlightthickness=2,
+                          bg="#1a2a3a", highlightthickness=2,
                           highlightbackground="#333", cursor="hand2")
             c.pack(side="left", padx=4)
             c.bind("<Button-1>", lambda e, idx=i: self._toggle_hold(idx))
             self._poker_canvases.append(c)
+            self._draw_card_back(c)
 
         self._poker_hold_labels = []
         hold_frame = tk.Frame(win, bg="#0e1117")
@@ -354,29 +475,40 @@ class CasinoMixin:
         bet_frame.pack(pady=8)
         tk.Label(bet_frame, text="Bet: $", font=("Arial", 11), bg="#0e1117", fg="white").pack(side="left")
         self._poker_bet_var = tk.StringVar(value="1000000")
-        tk.Entry(bet_frame, textvariable=self._poker_bet_var, width=12,
+        self._poker_bet_entry = tk.Entry(bet_frame, textvariable=self._poker_bet_var, width=12,
                  bg="#1e2130", fg="white", font=("Arial", 11),
-                 insertbackground="white", relief="flat").pack(side="left", ipady=4)
+                 insertbackground="white", relief="flat")
+        self._poker_bet_entry.pack(side="left", ipady=4)
 
-        self._poker_result = tk.Label(win, text="",
-                                      font=("Arial", 12, "bold"), bg="#0e1117", fg="white")
+        self._poker_result = tk.Label(win, text="Set your bet and click Deal.",
+                                      font=("Arial", 12, "bold"), bg="#0e1117", fg="#aaaaaa")
         self._poker_result.pack(pady=4)
 
         btn_frame = tk.Frame(win, bg="#0e1117")
         btn_frame.pack()
-        self._poker_deal_btn = tk.Button(btn_frame, text="Deal",
-                                         font=("Arial", 11, "bold"), bg="#1e2130", fg="white",
+        self._poker_deal_btn = tk.Button(btn_frame, text="Deal  ($)",
+                                         font=("Arial", 11, "bold"), bg="#00aa44", fg="white",
                                          relief="flat", padx=18, pady=6,
                                          command=self._poker_deal)
         self._poker_deal_btn.pack(side="left", padx=8)
         self._poker_draw_btn = tk.Button(btn_frame, text="Draw",
-                                         font=("Arial", 11, "bold"), bg="#00aa44", fg="white",
+                                         font=("Arial", 11, "bold"), bg="#1e2130", fg="#555555",
                                          relief="flat", padx=18, pady=6, state="disabled",
                                          command=self._poker_draw)
         self._poker_draw_btn.pack(side="left", padx=8)
 
         self._poker_deck = []
-        self._poker_deal()
+
+    def _draw_card_back(self, c):
+        c.delete("all")
+        c.configure(bg="#1a2a3a", highlightbackground="#333")
+        c.create_rectangle(4, 4, 68, 96, fill="#1e3a5f", outline="#2255aa", width=1)
+        # cross-hatch pattern
+        for y in range(8, 96, 8):
+            c.create_line(4, y, 68, y, fill="#1a3050", width=1)
+        for x in range(8, 68, 8):
+            c.create_line(x, 4, x, 96, fill="#1a3050", width=1)
+        c.create_rectangle(8, 8, 64, 92, fill="", outline="#2255aa", width=1)
 
     def _poker_new_deck(self):
         self._poker_deck = [(r, s) for s in self.SUITS for r in self.RANKS]
@@ -384,16 +516,36 @@ class CasinoMixin:
 
     def _poker_deal(self):
         try:
-            float(self._poker_bet_var.get().replace(",", ""))
+            bet = float(self._poker_bet_var.get().replace(",", ""))
         except ValueError:
             self._poker_result.config(text="Invalid bet.", fg="#ff4444")
             return
+        if bet <= 0:
+            self._poker_result.config(text="Bet must be > 0.", fg="#ff4444")
+            return
+        max_bet = min(30_000_000, self.money * 0.20)
+        if bet > max_bet:
+            self._poker_result.config(text=f"Max bet: ${max_bet:,.0f} (20% of balance)", fg="#ff4444")
+            return
+        if bet > self.money:
+            self._poker_result.config(text="Not enough money.", fg="#ff4444")
+            return
+
+        # Deduct bet upfront
+        self.money -= bet
+        self.market.money = self.money
+        self.update_status()
+
+        self._poker_current_bet = bet
         self._poker_new_deck()
         self._poker_hand = [self._poker_deck.pop() for _ in range(5)]
         self._poker_held = [False] * 5
-        self._poker_result.config(text="Select cards to hold, then Draw.")
+        self._poker_phase = "hold"
+
+        self._poker_result.config(text="Select cards to HOLD, then click Draw.", fg="#aaaaaa")
         self._poker_deal_btn.config(state="disabled")
-        self._poker_draw_btn.config(state="normal")
+        self._poker_draw_btn.config(state="normal", bg="#00aa44", fg="white")
+        self._poker_bet_entry.config(state="disabled")
         self._render_poker_cards()
 
     def _poker_draw(self):
@@ -401,13 +553,15 @@ class CasinoMixin:
             if not self._poker_held[i]:
                 self._poker_hand[i] = self._poker_deck.pop()
         self._poker_held = [False] * 5
+        self._poker_phase = "bet"
         self._render_poker_cards()
-        self._poker_deal_btn.config(state="normal")
-        self._poker_draw_btn.config(state="disabled")
+        self._poker_deal_btn.config(state="normal", bg="#00aa44", fg="white")
+        self._poker_draw_btn.config(state="disabled", bg="#1e2130", fg="#555555")
+        self._poker_bet_entry.config(state="normal")
         self._evaluate_poker()
 
     def _toggle_hold(self, idx):
-        if self._poker_draw_btn["state"] == "disabled":
+        if self._poker_phase != "hold":
             return
         self._poker_held[idx] = not self._poker_held[idx]
         self._render_poker_cards()
@@ -449,22 +603,28 @@ class CasinoMixin:
                                                    name, mult = "Jacks or Better!",  1
         else:                                      name, mult = "High Card — no win", 0
 
-        try:
-            bet = float(self._poker_bet_var.get().replace(",", ""))
-        except ValueError:
-            return
+        bet = self._poker_current_bet
 
         if mult > 0:
-            winnings = bet * mult
-            self.money += winnings
-            self._poker_result.config(text=f"{name}  +${winnings:,.0f}", fg="#ffdd44")
-            self.log_event(f"Poker: {name} +${winnings:,.0f}")
+            # Return bet + winnings (bet was already deducted on Deal)
+            payout = bet * (mult + 1)
+            self.money += payout
+            profit = bet * mult
+            self._poker_result.config(text=f"{name}  +${profit:,.0f}", fg="#ffdd44")
+            self.log_event(f"Poker: {name} +${profit:,.0f}")
         else:
-            self.money -= bet
+            # Bet already deducted — nothing more to do
             self._poker_result.config(text=f"{name}  -${bet:,.0f}", fg="#ff4444")
             self.log_event(f"Poker: high card, lost ${bet:,.0f}")
+
         self.market.money = self.money
         self.update_status()
+
+        # Reset cards to face-down for next round
+        for c in self._poker_canvases:
+            self._draw_card_back(c)
+        for lbl in self._poker_hold_labels:
+            lbl.config(text="")
 
     # =========================================================
     # WORK

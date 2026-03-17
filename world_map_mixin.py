@@ -543,6 +543,21 @@ class WorldMapMixin:
             if random.random() < 0.3:
                 self.apply_sanction(name, days=random.randint(5, 15))
 
+        # Multiplayer: check if bombed country belongs to another player → war
+        if action_name == "Bomb" and getattr(self, "is_multiplayer", False):
+            for rival_name, rival in self.rivals.items():
+                if rival.get("country", "") == name and not rival.get("disconnected"):
+                    self._declare_war_on_player(rival_name, name)
+                    break
+
+        # Single player: AI rival retaliates immediately if you bombed their territory
+        if action_name == "Bomb" and not getattr(self, "is_multiplayer", False):
+            rival_name = self.is_rival_controlled(resource, name)
+            if rival_name and rival_name in self.rivals:
+                rival = self.rivals[rival_name]
+                self.root.after(1500, lambda rn=rival_name, rv=rival:
+                                self._rival_retaliate(rn, rv, name, resource))
+
         mkt_mult = 1.06 if action_name == "Bomb" else 1.04
         for cat in RESOURCE_DATA[resource]["market"]:
             self.apply_market_effect([cat], mkt_mult, 4, f"{action_name}: {name}")
@@ -559,6 +574,13 @@ class WorldMapMixin:
 
     def process_resource_income(self):
         if not self.oil_operations:
+            return
+        if getattr(self, "blockaded_days", 0) > 0:
+            self.log_event("⚓ Blockade active — resource income seized today.")
+            # Still tick operations so they expire normally
+            for op in self.oil_operations:
+                op["days_left"] -= 1
+            self.oil_operations = [o for o in self.oil_operations if o["days_left"] > 0]
             return
         total = sum(op["income"] for op in self.oil_operations)
         for op in self.oil_operations:

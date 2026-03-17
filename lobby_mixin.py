@@ -2,25 +2,33 @@ import tkinter as tk
 
 LOBBY_TIERS = [
     {"id": "bribe_official", "name": "Bribe Local Official",
-     "desc": "Grease a few palms. Reduces transgressions by 10.",
-     "cost": 500_000, "once": False,
-     "effect": {"transgression": -10}},
-    {"id": "control_narrative", "name": "Control the Narrative",
-     "desc": "Plant stories in local media. +20 Public Opinion.",
-     "cost": 5_000_000, "once": False,
+     "desc": "Grease a few palms. Reduces transgressions by 8.",
+     "cost": 4_000_000, "once": False,
+     "effect": {"transgression": -8}},
+    {"id": "control_narrative", "name": "Leak Positive Stories",
+     "desc": "Plant flattering coverage in national media. +20 Public Opinion.",
+     "cost": 12_000_000, "once": False,
      "effect": {"opinion": 20}},
-    {"id": "buy_congressman", "name": "Buy a Congressman",
-     "desc": "Capitol Hill speed dial. -20 transgressions, +15 Public Opinion.",
-     "cost": 15_000_000, "once": False,
-     "effect": {"transgression": -20, "opinion": 15}},
+    {"id": "buy_senator_trans", "name": "Buy a Senator  [Records]",
+     "desc": "Have your criminal records quietly amended. -25 transgressions only.",
+     "cost": 40_000_000, "once": False,
+     "effect": {"transgression": -25}},
+    {"id": "buy_senator_opin", "name": "Buy a Senator  [Image]",
+     "desc": "Commission a full image rehabilitation campaign. +30 Public Opinion only.",
+     "cost": 40_000_000, "once": False,
+     "effect": {"opinion": 30}},
     {"id": "senate_immunity", "name": "Senate Immunity Deal",
      "desc": "Next bad random event is completely blocked. One use.",
-     "cost": 40_000_000, "once": True,
+     "cost": 60_000_000, "once": True,
      "effect": {"immunity": 1}},
-    {"id": "presidential_pardon", "name": "Presidential Pardon",
-     "desc": "Clean slate. Reset transgressions to 0, +30 Public Opinion.",
-     "cost": 100_000_000, "once": False,
-     "effect": {"transgression": -999, "opinion": 30}},
+    {"id": "full_expunge", "name": "Full Records Expunge",
+     "desc": "Wipe your criminal record entirely. Transgressions reset to 0. No opinion benefit.",
+     "cost": 150_000_000, "once": False,
+     "effect": {"transgression": -999}},
+    {"id": "presidential_rehab", "name": "Presidential Rehabilitation",
+     "desc": "State-sponsored image rebuild. Public Opinion set to 80. No records benefit.",
+     "cost": 150_000_000, "once": False,
+     "effect": {"opinion": 999}},
 ]
 
 
@@ -31,16 +39,40 @@ class LobbyMixin:
         win = tk.Toplevel(self.root)
         win.title("Lobby System")
         win.configure(bg="#0e1117")
-        win.geometry("500x480")
+        win.geometry("500x560")
         win.resizable(False, False)
 
         tk.Label(win, text="LOBBY SYSTEM",
                  font=("Impact", 24), bg="#0e1117", fg="#ffaa00").pack(pady=(18, 2))
         tk.Label(win, text="Influence politicians. Shape the narrative.",
-                 font=("Arial", 9), bg="#0e1117", fg="#666").pack(pady=(0, 12))
+                 font=("Arial", 9), bg="#0e1117", fg="#666").pack(pady=(0, 8))
+
+        # ── Scrollable content area ───────────────────────────────────
+        container = tk.Frame(win, bg="#0e1117")
+        container.pack(fill="both", expand=True, padx=0, pady=(0, 10))
+
+        canvas = tk.Canvas(container, bg="#0e1117", highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg="#0e1117")
+
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        def _wheel(event):
+            try:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except tk.TclError:
+                pass
+        canvas.bind_all("<MouseWheel>", _wheel)
+        win.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
         for tier in LOBBY_TIERS:
-            self._build_lobby_row(win, tier)
+            self._build_lobby_row(inner, tier)
 
     def _build_lobby_row(self, win, tier):
         already_used = (tier["once"] and tier["id"] == "senate_immunity"
@@ -73,7 +105,11 @@ class LobbyMixin:
             if "transgression" in eff:
                 self.transgressions = max(0, min(100, self.transgressions + eff["transgression"]))
             if "opinion" in eff:
-                self.public_opinion = max(0, min(100, self.public_opinion + eff["opinion"]))
+                # 999 = set to 80 cap; otherwise add normally
+                if eff["opinion"] == 999:
+                    self.public_opinion = min(100, max(self.public_opinion, 80))
+                else:
+                    self.public_opinion = max(0, min(100, self.public_opinion + eff["opinion"]))
             if "immunity" in eff:
                 self.lobby_immunity = True
                 self.log_event("Senate Immunity active — next bad event is blocked.")

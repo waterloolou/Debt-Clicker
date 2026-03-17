@@ -14,7 +14,7 @@ class DebtMixin:
         win = tk.Toplevel(self.root)
         win.title("Debt & Loans")
         win.configure(bg="#0e1117")
-        win.geometry("500x540")
+        win.geometry("500x520")
         win.resizable(False, False)
 
         tk.Label(win, text="DEBT & LOANS",
@@ -23,23 +23,49 @@ class DebtMixin:
         total_owed = sum(l["remaining"] for l in getattr(self, "loans", []))
         debt_color = "#ff4444" if total_owed > 0 else "#00ff90"
         tk.Label(win, text=f"Total Owed: ${total_owed:,.0f}",
-                 font=("Arial", 11, "bold"), bg="#0e1117", fg=debt_color).pack(pady=(0, 8))
+                 font=("Arial", 11, "bold"), bg="#0e1117", fg=debt_color).pack(pady=(0, 4))
 
-        tk.Label(win, text="Active Loans", font=("Arial", 10, "bold"),
-                 bg="#0e1117", fg="#aaaaaa").pack()
+        # ── Scrollable content area ───────────────────────────────────
+        container = tk.Frame(win, bg="#0e1117")
+        container.pack(fill="both", expand=True, padx=0, pady=(0, 10))
+
+        canvas = tk.Canvas(container, bg="#0e1117", highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        inner = tk.Frame(canvas, bg="#0e1117")
+
+        inner.bind("<Configure>",
+                   lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        def _wheel(event):
+            try:
+                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except tk.TclError:
+                pass
+        canvas.bind_all("<MouseWheel>", _wheel)
+        win.bind("<Destroy>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        # ── Active loans ──────────────────────────────────────────────
+        tk.Label(inner, text="Active Loans", font=("Arial", 10, "bold"),
+                 bg="#0e1117", fg="#aaaaaa").pack(pady=(8, 2))
 
         loans = getattr(self, "loans", [])
         if not loans:
-            tk.Label(win, text="No active loans.", font=("Arial", 9),
+            tk.Label(inner, text="No active loans.", font=("Arial", 9),
                      bg="#0e1117", fg="#555").pack(pady=4)
         else:
             for i, loan in enumerate(loans):
-                row = tk.Frame(win, bg="#1e2130", pady=6, padx=12)
+                row = tk.Frame(inner, bg="#1e2130", pady=6, padx=12)
                 row.pack(fill="x", padx=16, pady=2)
+                urgency = "#ff4444" if loan["days_left"] <= 5 else "white"
                 tk.Label(row,
                          text=f"Loan #{i+1}: ${loan['remaining']:,.0f}  |  "
                               f"{loan['rate']*100:.0f}%/day  |  {loan['days_left']} days left",
-                         font=("Arial", 9), bg="#1e2130", fg="white").pack(side="left")
+                         font=("Arial", 9), bg="#1e2130", fg=urgency).pack(side="left")
 
                 def repay(idx=i, w=win):
                     l = self.loans[idx]
@@ -59,12 +85,13 @@ class DebtMixin:
                           relief="flat", padx=8, pady=3,
                           command=repay).pack(side="right")
 
-        tk.Frame(win, bg="#333", height=1).pack(fill="x", padx=24, pady=8)
-        tk.Label(win, text="New Loans", font=("Arial", 10, "bold"),
+        # ── New loans ─────────────────────────────────────────────────
+        tk.Frame(inner, bg="#333", height=1).pack(fill="x", padx=24, pady=8)
+        tk.Label(inner, text="New Loans", font=("Arial", 10, "bold"),
                  bg="#0e1117", fg="#aaaaaa").pack(pady=(0, 4))
 
         for opt in LOAN_OPTIONS:
-            row = tk.Frame(win, bg="#1e2130", pady=8, padx=12)
+            row = tk.Frame(inner, bg="#1e2130", pady=8, padx=12)
             row.pack(fill="x", padx=16, pady=4)
 
             info = tk.Frame(row, bg="#1e2130")

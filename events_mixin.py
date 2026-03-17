@@ -10,7 +10,7 @@ class EventsMixin:
     # =========================================================
 
     def random_events(self):
-        r = random.randint(1, 70)
+        r = random.randint(1, 50)   # tighter range → bad events ~40 % more frequent
 
         # Senate immunity blocks one bad event
         if getattr(self, "lobby_immunity", False) and r not in (4, 10, 18):  # skip good events
@@ -61,12 +61,8 @@ class EventsMixin:
                 self.show_event("Identity Theft!", "Someone stole your credit ID and went gambling. You lost $500,000.")
             self.apply_market_effect(["Finance", "Technology"], 0.94, 2, "Identity theft")
 
-        elif r == 7 and not self.epstein:
-            self.epstein = True
-            self.money -= 10000000
-            self.show_event("Island Discovered...", "Your ventures to Epstein's island have been discovered. Lose $10,000,000 to cover it up.")
-            self.apply_market_effect(["Entertainment", "Finance"], 0.88, 4, "Epstein scandal")
-            self.add_transgression(20, 20)
+        elif r == 7 and not self.epstein and not self.epstein_visited:
+            self._show_epstein_invite()
 
         elif r == 8:
             self.money -= 5000000
@@ -320,6 +316,213 @@ class EventsMixin:
         tk.Button(btn_frame, text="Decline (Risk Death)", bg="#1e2130", fg="#ff4444",
                   relief="flat", font=("Arial", 10), padx=18, pady=4,
                   command=decline).pack(side="left", padx=12)
+
+    # =========================================================
+    # EPSTEIN INVITE  (text-message style popup)
+    # =========================================================
+
+    def _show_epstein_invite(self):
+        owns_island = "Little Saint James" in self.owned_islands
+
+        popup = tk.Toplevel(self.root)
+        popup.title("New Message")
+        popup.configure(bg="#1c1c1e")
+        popup.geometry("340x520")
+        popup.resizable(False, False)
+
+        # ── Status bar ───────────────────────────────────────────────────
+        bar = tk.Frame(popup, bg="#1c1c1e")
+        bar.pack(fill="x", padx=16, pady=(10, 0))
+        tk.Label(bar, text="9:41 AM", font=("Arial", 11, "bold"),
+                 bg="#1c1c1e", fg="white").pack(side="left")
+        tk.Label(bar, text="● ● ●  WiFi  🔋", font=("Arial", 8),
+                 bg="#1c1c1e", fg="white").pack(side="right")
+
+        # ── Contact header ───────────────────────────────────────────────
+        hdr = tk.Frame(popup, bg="#1c1c1e")
+        hdr.pack(fill="x", padx=16, pady=(8, 4))
+
+        av = tk.Canvas(hdr, width=40, height=40, bg="#1c1c1e", highlightthickness=0)
+        av.create_oval(2, 2, 38, 38, fill="#5856d6", outline="")
+        av.create_text(20, 20, text="JE", font=("Arial", 13, "bold"), fill="white")
+        av.pack(side="left", padx=(0, 10))
+
+        info = tk.Frame(hdr, bg="#1c1c1e")
+        info.pack(side="left")
+        tk.Label(info, text="Jeffrey Epstein", font=("Arial", 12, "bold"),
+                 bg="#1c1c1e", fg="white").pack(anchor="w")
+        tk.Label(info, text="+1 (340) 776-6330", font=("Arial", 8),
+                 bg="#1c1c1e", fg="#8e8e93").pack(anchor="w")
+
+        tk.Frame(popup, bg="#38383a", height=1).pack(fill="x")
+
+        # ── Message bubbles ──────────────────────────────────────────────
+        msg_frame = tk.Frame(popup, bg="#000000")
+        msg_frame.pack(fill="both", expand=True, padx=0, pady=0)
+
+        tk.Label(msg_frame, text="Today  9:38 AM", font=("Arial", 8),
+                 bg="#000000", fg="#8e8e93").pack(pady=(12, 6))
+
+        def _bubble(text, color="#1c8a1c", anchor="e", padx=(60, 12)):
+            outer = tk.Frame(msg_frame, bg="#000000")
+            outer.pack(fill="x", padx=padx, pady=3, anchor=anchor)
+            lbl = tk.Label(outer, text=text, font=("Arial", 10),
+                           bg=color, fg="white", wraplength=220,
+                           justify="left", padx=12, pady=8)
+            lbl.pack(side="right" if anchor == "e" else "left")
+
+        if owns_island:
+            _bubble("Hey, I heard you bought my old place 👀", "#1c8a1c", "e", (60, 12))
+            _bubble("You own the island now.\nYou want to... invite someone?", "#1c8a1c", "e", (60, 12))
+            _bubble("I know a few people who'd love to visit 😈", "#1c8a1c", "e", (60, 12))
+        else:
+            _bubble("Hey, heard you've been doing well 💰", "#1c8a1c", "e", (60, 12))
+            _bubble("I'm having a little gathering at my island this weekend.", "#1c8a1c", "e", (60, 12))
+            _bubble("Very private. Very exclusive.\nYou should come 😉", "#1c8a1c", "e", (60, 12))
+            _bubble("There's a settlement in it for you.\n$3,000,000. Think about it.", "#1c8a1c", "e", (60, 12))
+
+        tk.Label(msg_frame, text="Delivered", font=("Arial", 7),
+                 bg="#000000", fg="#8e8e93").pack(anchor="e", padx=14)
+
+        # ── Action buttons ───────────────────────────────────────────────
+        tk.Frame(popup, bg="#38383a", height=1).pack(fill="x")
+        btn_row = tk.Frame(popup, bg="#1c1c1e")
+        btn_row.pack(fill="x", pady=10, padx=12)
+
+        if owns_island:
+            # Rival dropdown
+            rival_names = list(self.rivals.keys()) if self.rivals else []
+            if not rival_names:
+                popup.destroy()
+                return
+
+            sel = tk.StringVar(value=rival_names[0])
+            from tkinter import ttk
+            style = ttk.Style()
+            style.theme_use("clam")
+            style.configure("EP.TCombobox", fieldbackground="#2c2c2e",
+                            background="#2c2c2e", foreground="white",
+                            selectbackground="#2c2c2e")
+            dd = ttk.Combobox(btn_row, textvariable=sel, values=rival_names,
+                              state="readonly", width=18, style="EP.TCombobox")
+            dd.pack(side="left", padx=(0, 8))
+
+            def _frame_rival():
+                target = sel.get()
+                self._epstein_frame_rival(target)
+                popup.destroy()
+
+            tk.Button(btn_row, text="Invite & Frame 😈",
+                      font=("Arial", 10, "bold"), bg="#ff3b30", fg="white",
+                      relief="flat", padx=12, pady=6,
+                      command=_frame_rival).pack(side="left", padx=4)
+            tk.Button(btn_row, text="Ignore",
+                      font=("Arial", 10), bg="#2c2c2e", fg="#8e8e93",
+                      relief="flat", padx=12, pady=6,
+                      command=popup.destroy).pack(side="left", padx=4)
+        else:
+            def _accept():
+                self.happiness = min(100, self.happiness + 35)
+                self.money += 3_000_000
+                self.market.money = self.money
+                self.epstein_visited = True
+                self.epstein_catch_days = random.randint(4, 9)
+                self.update_status()
+                self.log_event("You accepted Epstein's invitation. Happiness way up. $3M richer.")
+                self._add_ticker("SOCIETY: Prominent billionaire spotted at private Caribbean gathering...")
+                popup.destroy()
+
+            def _decline():
+                self.log_event("You declined Epstein's invitation. Smart.")
+                self.epstein = True   # mark as handled so it won't fire again
+                popup.destroy()
+
+            tk.Button(btn_row, text="Accept ✈️  (+$3M, +Happiness)",
+                      font=("Arial", 10, "bold"), bg="#30d158", fg="white",
+                      relief="flat", padx=12, pady=6,
+                      command=_accept).pack(fill="x", pady=(0, 6))
+            tk.Button(btn_row, text="Decline 🚫",
+                      font=("Arial", 10), bg="#2c2c2e", fg="#8e8e93",
+                      relief="flat", padx=12, pady=6,
+                      command=_decline).pack(fill="x")
+
+    def _epstein_frame_rival(self, rival_name):
+        """Invite a rival to Little Saint James, then leak it to the press."""
+        rival = self.rivals.get(rival_name)
+        if not rival:
+            return
+        # Rival loses reputation (money hit + scandal flag)
+        scandal_hit = int(rival["money"] * random.uniform(0.30, 0.50))
+        rival["money"] = max(0, rival["money"] - scandal_hit)
+        rival["scandal"] = True
+
+        # Market hit in rival's name
+        self.apply_market_effect(["Finance", "Entertainment"], 0.88, 5,
+                                 f"{rival_name} Epstein scandal")
+        # Player benefits — happiness, small payout, clean image
+        self.happiness = min(100, self.happiness + 20)
+        self.money += 5_000_000
+        self.market.money = self.money
+        self.epstein = True   # mark as handled
+
+        self.log_event(f"You invited {rival_name} to Little Saint James and leaked it to the press. "
+                       f"Their reputation is destroyed. +$5M.")
+        self._add_ticker(f"SCANDAL: {rival_name} linked to disgraced financier's private island...")
+        self.update_status()
+
+    def check_epstein_caught(self):
+        """Call this from main_loop each day."""
+        if not getattr(self, "epstein_visited", False) or self.epstein:
+            return
+        self.epstein_catch_days -= 1
+        if self.epstein_catch_days > 0:
+            return
+        # Time's up — 65 % chance of getting caught
+        self.epstein = True
+        self.epstein_visited = False
+        if random.random() < 0.65:
+            self._show_epstein_caught()
+        else:
+            self.log_event("Your visit to Epstein's island was never discovered. You got lucky.")
+            self._add_ticker("CELEBRITY: Billionaire denies any connection to financier's island estate...")
+
+    def _show_epstein_caught(self):
+        self.add_transgression(35, 40)
+        self.happiness = max(0, self.happiness - 20)
+        self.apply_market_effect(["Entertainment", "Finance"], 0.82, 6, "Epstein scandal exposed")
+        self._add_ticker("BREAKING: Billionaire EXPOSED — visited Epstein's island, sources confirm...")
+        self.log_event("EXPOSED: Your Epstein island visit leaked to the press. "
+                       "Transgressions +35, public opinion -40.")
+
+        popup = tk.Toplevel(self.root)
+        popup.title("BREAKING NEWS")
+        popup.configure(bg="#0e1117")
+        popup.geometry("420x280")
+        popup.resizable(False, False)
+
+        # Fake news chyron
+        tk.Frame(popup, bg="#cc0000", height=6).pack(fill="x")
+        tk.Label(popup, text="🔴  BREAKING NEWS",
+                 font=("Impact", 14), bg="#cc0000", fg="white").pack(fill="x", pady=4)
+        tk.Label(popup,
+                 text="BILLIONAIRE LINKED TO EPSTEIN'S PRIVATE ISLAND",
+                 font=("Impact", 13), bg="#111111", fg="#ffdd00",
+                 wraplength=400).pack(fill="x", pady=6)
+        tk.Label(popup,
+                 text="Sources confirm you were among the guests at Little Saint James.\n"
+                      "Public opinion in freefall. Congressional hearings scheduled.\n"
+                      "Your lawyers are already charging by the hour.",
+                 font=("Arial", 9), bg="#0e1117", fg="#aaaaaa",
+                 wraplength=390, justify="center").pack(pady=10)
+        tk.Frame(popup, bg="#cc0000", height=3).pack(fill="x")
+        ticker = tk.Label(popup,
+                          text="  LIVE  •  Public opinion -40  •  Transgressions +35  •  Markets crashing  •  LIVE  ",
+                          font=("Arial", 8), bg="#cc0000", fg="white")
+        ticker.pack(fill="x")
+        tk.Button(popup, text="No comment.",
+                  font=("Arial", 10, "bold"), bg="#1e2130", fg="white",
+                  relief="flat", padx=20, pady=8,
+                  command=popup.destroy).pack(pady=12)
 
     # =========================================================
     # MARKET EFFECTS

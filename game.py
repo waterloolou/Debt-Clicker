@@ -17,9 +17,11 @@ from lobby_mixin import LobbyMixin
 from black_market_mixin import BlackMarketMixin
 from debt_mixin import DebtMixin
 from rivals_mixin import RivalsMixin
+from multiplayer_mixin import MultiplayerMixin
+from militia_mixin import MilitiaMixin
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin):
+class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -36,6 +38,8 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.running         = False
         self.current_category = "All"
         self.stock_labels    = {}
+        self.is_multiplayer  = False
+        self.net_client      = None
 
         self._init_flags()
 
@@ -56,6 +60,8 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
 
     def _init_flags(self):
         self.epstein         = False
+        self.epstein_visited = False
+        self.epstein_catch_days = 0
         self.subscription    = False
         self.revolution      = True
         self.pet             = True
@@ -83,10 +89,20 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.lobby_immunity  = False
         self.alliance        = None
         self.alliance_days   = 0
+        self.alliance_tier   = 0
         self.sanctions       = {}
         self.wanted_level    = 0
         self.net_worth_history = []
         self.rivals          = {}
+        self.is_multiplayer  = False
+        self.warned_happiness   = False
+        self.warned_opinion     = False
+        self.warned_transgress  = False
+        self.death_cause        = "broke"
+        self.active_wars        = {}   # rival_name -> days_remaining
+        self.militia            = 0
+        self.blockaded_days     = 0
+        self.advisor_cursed_days = 0
 
     # =========================================================
     # GAME START
@@ -198,7 +214,6 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
             return
         self.days += 1
         self.lose_money()
-        self.random_events()
         self.update_stock_prices()
         self.process_resource_income()
         self.process_island_income()
@@ -207,10 +222,24 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.check_war_events()
         self.update_wanted_level()
         self.track_net_worth()
+        if self.is_multiplayer and self.net_client and self.net_client.connected:
+            self._send_game_state()
         self.process_sanctions()
         self.process_alliance_tick()
+        self.process_wars()
+        self.process_militia_effects()
+        self.check_epstein_caught()
+        self._tick_bm_cooldowns()
+        self.check_critical_stats()
+        if not self.running:
+            return
+        # Events fire at end of day, after all other processing
+        self.random_events()
+        if random.random() < 0.45:
+            self.random_events()
         if self.money <= 0:
             self.running = False
+            self.death_cause = "broke"
             self.log_event("You lost everything.")
             self.root.after(1500, self._show_end_screen)
             return
@@ -222,24 +251,64 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
 
     def lose_money(self):
         m = self.money
-        if m < 50:       lost = random.randint(1, 25)
-        elif m < 100:    lost = random.randint(10, 50)
-        elif m < 1000:   lost = random.randint(100, 500)
-        elif m < 10000:  lost = random.randint(100, 1000)
-        elif m < 100000: lost = random.randint(1000, 10000)
-        else:            lost = random.randint(100, 10_000_000)
+        if m < 50:              lost = random.randint(1, 25)
+        elif m < 100:           lost = random.randint(10, 50)
+        elif m < 1_000:         lost = random.randint(100, 500)
+        elif m < 10_000:        lost = random.randint(500, 2_000)
+        elif m < 100_000:       lost = random.randint(2_000, 15_000)
+        elif m < 1_000_000:     lost = int(m * random.uniform(0.02, 0.06))   # 2–6 %
+        elif m < 10_000_000:    lost = int(m * random.uniform(0.015, 0.045)) # 1.5–4.5 %
+        elif m < 100_000_000:   lost = int(m * random.uniform(0.008, 0.022)) # 0.8–2.2 %
+        else:                   lost = int(m * random.uniform(0.006, 0.016)) # 0.6–1.6 %
+
+        # Idle escalator: extra drain if no active income (no operations running)
+        idle = len(self.oil_operations) == 0 and len(self.owned_islands) == 0
+        if idle and m >= 1_000_000:
+            idle_tax = int(m * 0.005)   # +0.5 % per day while fully idle
+            lost += idle_tax
+            self.log_event(f"Idle overhead: -${idle_tax:,} (no active operations)")
+
         self.money -= lost
         self.market.money = self.money
-        self.log_event(f"Lost ${lost:,}")
+        self.log_event(f"Daily expenses: -${lost:,}")
         self.apply_asset_costs()
-        # Daily metric drift: happiness decays, opinion slowly recovers
-        self.happiness      = max(0,   self.happiness      - 2)
-        self.public_opinion = min(100, self.public_opinion + 0.5)
+        # Daily metric drift
+        self.happiness      = max(0,   self.happiness      - 1)    # -1/day (was -2, too punishing)
+        self.public_opinion = min(100, self.public_opinion + 0.3)  # slow natural recovery
+        # Transgressions very slowly decay when no active heat (below wanted level 2)
+        if self.transgressions > 0 and self.wanted_level < 2:
+            self.transgressions = max(0, self.transgressions - 0.4)
         self.update_status()
 
     # =========================================================
     # STAT HELPERS
     # =========================================================
+
+    def process_wars(self):
+        """Daily cost of being at war with another player."""
+        if not self.active_wars:
+            return
+        expired = [name for name, days in self.active_wars.items() if days <= 0]
+        for name in expired:
+            del self.active_wars[name]
+            self.log_event(f"[WAR] Ceasefire reached with {name}.")
+            self._add_ticker(f"DIPLOMACY: Ceasefire declared — hostilities end with {name}...")
+        for name in list(self.active_wars):
+            war_tax = 1_500_000
+            self.active_wars[name] -= 1
+            self.money -= war_tax
+            self.market.money = self.money
+            self.add_transgression(1, 1)
+            self.log_event(f"[WAR] War tax vs {name}: -${war_tax:,}  "
+                           f"({self.active_wars[name]} days remaining)")
+
+    def _tick_bm_cooldowns(self):
+        if not hasattr(self, "_bm_cooldowns"):
+            return
+        for key in list(self._bm_cooldowns):
+            self._bm_cooldowns[key] -= 1
+            if self._bm_cooldowns[key] <= 0:
+                del self._bm_cooldowns[key]
 
     def add_happiness(self, n):
         self.happiness = min(100, self.happiness + n)
@@ -250,6 +319,99 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         hit = opinion_hit if opinion_hit is not None else n // 2
         self.public_opinion  = max(0,   self.public_opinion - hit)
         self._update_bars()
+
+    # =========================================================
+    # CRITICAL STAT CHECKS  (happiness / opinion / transgressions)
+    # =========================================================
+
+    def check_critical_stats(self):
+        # ── Happiness ────────────────────────────────────────────────────
+        if self.happiness <= 0:
+            if self.warned_happiness:
+                self.running = False
+                self.death_cause = "happiness"
+                self.log_event("You lost the will to live. The empire crumbles.")
+                self.root.after(1500, self._show_end_screen)
+                return
+            else:
+                self.warned_happiness = True
+                self._critical_warning(
+                    "😶  No Will to Live",
+                    "Your happiness has hit zero.\nYou've forgotten why you're doing any of this.",
+                    "Increase your happiness within 1 day\nor your empire — and you — are finished.",
+                    "#ff9900"
+                )
+        else:
+            self.warned_happiness = False   # recovered — reset warning
+
+        # ── Public Opinion ───────────────────────────────────────────────
+        if self.public_opinion <= 0:
+            if self.warned_opinion:
+                self.running = False
+                self.death_cause = "opinion"
+                self.log_event("The public turned on you. Riots outside every property you own.")
+                self.root.after(1500, self._show_end_screen)
+                return
+            else:
+                self.warned_opinion = True
+                self._critical_warning(
+                    "📉  Public Opinion Collapse",
+                    "Nobody wants anything to do with you.\nYour name is poison.",
+                    "Recover public opinion within 1 day\nor the mob tears everything down.",
+                    "#ff4444"
+                )
+        else:
+            self.warned_opinion = False
+
+        # ── Transgressions ───────────────────────────────────────────────
+        if self.transgressions >= 100:
+            if self.warned_transgress:
+                self.running = False
+                self.death_cause = "transgressions"
+                self.log_event("Your crimes caught up with you. Life in prison. No parole.")
+                self.root.after(1500, self._show_end_screen)
+                return
+            else:
+                self.warned_transgress = True
+                self._critical_warning(
+                    "⛓️  Crimes Uncoverable",
+                    "Every agency on Earth is building a case against you.\nThe walls are closing in.",
+                    "Reduce your transgressions within 1 day\nor face life in a supermax.",
+                    "#cc00ff"
+                )
+        else:
+            self.warned_transgress = False
+
+    def _critical_warning(self, title, body, action, color):
+        popup = tk.Toplevel(self.root)
+        popup.title("⚠️  WARNING")
+        popup.configure(bg="#0e1117")
+        popup.geometry("420x260")
+        popup.resizable(False, False)
+
+        tk.Frame(popup, bg=color, height=5).pack(fill="x")
+
+        tk.Label(popup, text=title,
+                 font=("Impact", 18), bg="#0e1117", fg=color).pack(pady=(16, 6))
+        tk.Label(popup, text=body,
+                 font=("Arial", 10), bg="#0e1117", fg="#dddddd",
+                 wraplength=380, justify="center").pack(pady=4)
+
+        tk.Frame(popup, bg="#1e2130", height=1).pack(fill="x", padx=30, pady=8)
+
+        tk.Label(popup, text=action,
+                 font=("Arial", 10, "bold"), bg="#0e1117", fg=color,
+                 wraplength=380, justify="center").pack(pady=4)
+
+        tk.Label(popup, text="YOU HAVE 1 DAY",
+                 font=("Impact", 14), bg="#0e1117", fg="#ff2222").pack(pady=(4, 10))
+
+        tk.Button(popup, text="Understood",
+                  font=("Arial", 10, "bold"), bg=color, fg="white",
+                  relief="flat", padx=24, pady=6,
+                  command=popup.destroy).pack()
+
+        tk.Frame(popup, bg=color, height=5).pack(fill="x", pady=(10, 0))
 
     # =========================================================
     # WANTED LEVEL
@@ -325,91 +487,240 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
     # ALLIANCE
     # =========================================================
 
+    # Per-ally config: discount countries, daily perks, tier costs/durations
+    _ALLIANCE_DATA = {
+        "USA": {
+            "color": "#3399ff",
+            "countries": {"United States of America", "Canada", "United Kingdom",
+                          "Australia", "Japan", "South Korea", "Germany", "France",
+                          "Netherlands", "Norway", "Poland", "Sweden", "Denmark"},
+            "tiers": [
+                {"label": "Basic",    "cost": 50_000_000,  "days": 30,
+                 "perks": ["30% op discount in Western nations",
+                           "+$750K passive income/day",
+                           "Rivals' smear/lawsuit blocked 25% of the time"]},
+                {"label": "Strategic","cost": 120_000_000, "days": 60,
+                 "perks": ["30% op discount in Western nations",
+                           "+$2M passive income/day",
+                           "Rivals' smear/lawsuit blocked 50% of the time",
+                           "-3 transgressions/day (media suppression)",
+                           "War damage reduced 30% in multiplayer"]},
+            ],
+        },
+        "Russia": {
+            "color": "#dd3333",
+            "countries": {"Russia", "Kazakhstan", "Belarus", "Ukraine",
+                          "Serbia", "Hungary", "Bulgaria"},
+            "tiers": [
+                {"label": "Basic",    "cost": 50_000_000,  "days": 30,
+                 "perks": ["30% op discount in Eastern nations",
+                           "+20 militia units/day",
+                           "Rivals' sabotage/raid blocked 25% of the time"]},
+                {"label": "Strategic","cost": 120_000_000, "days": 60,
+                 "perks": ["30% op discount in Eastern nations",
+                           "+40 militia units/day",
+                           "Rivals' sabotage/raid blocked 50% of the time",
+                           "Your militia attacks deal +25% more damage",
+                           "War damage reduced 30% in multiplayer"]},
+            ],
+        },
+        "China": {
+            "color": "#ffcc00",
+            "countries": {"China", "Taiwan", "South Korea", "Vietnam",
+                          "Indonesia", "India", "Singapore", "Thailand"},
+            "tiers": [
+                {"label": "Basic",    "cost": 50_000_000,  "days": 30,
+                 "perks": ["30% op discount in Asia-Pacific nations",
+                           "+15% bonus on all resource income/day",
+                           "Rivals' regulatory tip-offs blocked 25% of the time"]},
+                {"label": "Strategic","cost": 120_000_000, "days": 60,
+                 "perks": ["30% op discount in Asia-Pacific nations",
+                           "+25% bonus on all resource income/day",
+                           "Rivals' regulatory tip-offs blocked 50% of the time",
+                           "+5 public opinion/day (state media support)",
+                           "War damage reduced 30% in multiplayer"]},
+            ],
+        },
+    }
+
     def process_alliance_tick(self):
-        if self.alliance and self.alliance_days > 0:
-            self.alliance_days -= 1
-            if self.alliance_days == 0:
-                self.log_event(f"Alliance with {self.alliance} has expired.")
-                self.alliance = None
+        if not self.alliance:
+            return
+        tier_idx = getattr(self, "alliance_tier", 0)
+        data     = self._ALLIANCE_DATA[self.alliance]
+        tier     = data["tiers"][tier_idx]
+
+        # Apply daily perks
+        if self.alliance == "USA":
+            bonus = 2_000_000 if tier_idx == 1 else 750_000
+            self.money += bonus
+            self.market.money = self.money
+            if tier_idx == 1:
+                self.transgressions = max(0, self.transgressions - 3)
+
+        elif self.alliance == "Russia":
+            units = 40 if tier_idx == 1 else 20
+            self.militia = getattr(self, "militia", 0) + units
+            self.log_event(f"Alliance: Russia supplied {units} militia units.")
+
+        elif self.alliance == "China":
+            pct  = 0.25 if tier_idx == 1 else 0.15
+            bonus = int(sum(op["income"] for op in self.oil_operations) * pct)
+            if bonus > 0:
+                self.money += bonus
+                self.market.money = self.money
+            if tier_idx == 1:
+                self.public_opinion = min(100, self.public_opinion + 5)
+
+        # Count down
+        self.alliance_days -= 1
+        if self.alliance_days == 0:
+            self.log_event(f"Alliance with {self.alliance} ({tier['label']}) has expired.")
+            self.alliance      = None
+            self.alliance_tier = 0
 
     def get_alliance_discount(self, country):
         """Return cost multiplier based on current alliance."""
         if not self.alliance:
             return 1.0
-        usa_discount = {"United States of America", "Canada", "United Kingdom",
-                        "Australia", "Japan", "South Korea", "Germany", "France",
-                        "Netherlands", "Norway", "Poland", "Sweden", "Denmark"}
-        russia_discount = {"Russia", "Kazakhstan", "Belarus", "Ukraine",
-                           "Serbia", "Hungary", "Bulgaria"}
-        china_discount = {"China", "Taiwan", "South Korea", "Vietnam",
-                          "Indonesia", "India", "Singapore", "Thailand"}
-        if self.alliance == "USA" and country in usa_discount:
+        if country in self._ALLIANCE_DATA[self.alliance]["countries"]:
             return 0.70
-        if self.alliance == "Russia" and country in russia_discount:
-            return 0.70
-        if self.alliance == "China" and country in china_discount:
-            return 0.70
+        return 1.0
+
+    def get_alliance_block_chance(self, attack_type):
+        """Chance (0–1) that the current alliance blocks an incoming attack type."""
+        if not self.alliance:
+            return 0.0
+        tier_idx = getattr(self, "alliance_tier", 0)
+        base     = 0.50 if tier_idx == 1 else 0.25
+        blocks = {
+            "USA":    {"smear", "lawsuit"},
+            "Russia": {"sabotage", "raid"},
+            "China":  {"lobby"},
+        }
+        if attack_type in blocks.get(self.alliance, set()):
+            return base
+        return 0.0
+
+    def get_alliance_war_reduction(self):
+        """Damage multiplier applied to incoming war actions (multiplayer)."""
+        if not self.alliance:
+            return 1.0
+        tier_idx = getattr(self, "alliance_tier", 0)
+        return 0.70 if tier_idx == 1 else 1.0
+
+    def get_alliance_militia_bonus(self):
+        """Outgoing militia attack damage multiplier (Russia Strategic only)."""
+        if self.alliance == "Russia" and getattr(self, "alliance_tier", 0) == 1:
+            return 1.25
         return 1.0
 
     def open_alliance_window(self):
         win = tk.Toplevel(self.root)
         win.title("Alliance System")
         win.configure(bg="#0e1117")
-        win.geometry("460x360")
+        win.geometry("520x600")
         win.resizable(False, False)
 
         tk.Label(win, text="ALLIANCE SYSTEM",
                  font=("Impact", 22), bg="#0e1117", fg="#4499ff").pack(pady=(18, 2))
 
-        current = self.alliance or "None"
-        days_left = self.alliance_days
-        tk.Label(win, text=f"Current Alliance: {current}" + (f" ({days_left} days left)" if self.alliance else ""),
-                 font=("Arial", 10), bg="#0e1117", fg="#aaaaaa").pack(pady=(0, 12))
+        if self.alliance:
+            tier_idx  = getattr(self, "alliance_tier", 0)
+            tier_name = self._ALLIANCE_DATA[self.alliance]["tiers"][tier_idx]["label"]
+            color     = self._ALLIANCE_DATA[self.alliance]["color"]
+            tk.Label(win, text=f"Active: {self.alliance}  [{tier_name}]  —  {self.alliance_days} days left",
+                     font=("Arial", 10, "bold"), bg="#0e1117", fg=color).pack(pady=(0, 4))
 
-        for ally, desc, countries_hint in [
-            ("USA",    "30% discount in Western nations. Costs $50M.", "US, Canada, UK, EU, Australia, Japan"),
-            ("Russia", "30% discount in Eastern/Central nations. Costs $50M.", "Russia, Kazakhstan, Belarus, Serbia, Bulgaria"),
-            ("China",  "30% discount in Asia-Pacific nations. Costs $50M.", "China, Taiwan, Korea, Indonesia, India"),
-        ]:
-            row = tk.Frame(win, bg="#1e2130", pady=8, padx=12)
-            row.pack(fill="x", padx=16, pady=4)
+            # Show active perks
+            perk_frame = tk.Frame(win, bg="#111820", padx=10, pady=6)
+            perk_frame.pack(fill="x", padx=20, pady=(0, 10))
+            tk.Label(perk_frame, text="Active Perks:", font=("Arial", 8, "bold"),
+                     bg="#111820", fg="#aaa").pack(anchor="w")
+            for perk in self._ALLIANCE_DATA[self.alliance]["tiers"][tier_idx]["perks"]:
+                tk.Label(perk_frame, text=f"  ✓  {perk}", font=("Arial", 8),
+                         bg="#111820", fg="#00dd88").pack(anchor="w")
+        else:
+            tk.Label(win, text="No active alliance.", font=("Arial", 10),
+                     bg="#0e1117", fg="#666").pack(pady=(0, 10))
 
-            info = tk.Frame(row, bg="#1e2130")
-            info.pack(side="left", fill="both", expand=True)
+        tk.Frame(win, bg="#2a2a3a", height=1).pack(fill="x", padx=20, pady=4)
 
-            tk.Label(info, text=f"Ally with {ally}", font=("Arial", 11, "bold"),
-                     bg="#1e2130", fg="white", anchor="w").pack(anchor="w")
-            tk.Label(info, text=desc, font=("Arial", 8),
-                     bg="#1e2130", fg="#888", anchor="w").pack(anchor="w")
-            tk.Label(info, text=countries_hint, font=("Arial", 7),
-                     bg="#1e2130", fg="#555", anchor="w").pack(anchor="w")
+        # Scrollable content
+        canvas = tk.Canvas(win, bg="#0e1117", highlightthickness=0)
+        sb     = tk.Scrollbar(win, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        inner = tk.Frame(canvas, bg="#0e1117")
+        cw    = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(
+            scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(cw, width=e.width))
+        canvas.bind_all("<MouseWheel>",
+                        lambda e: canvas.yview_scroll(-1*(e.delta//120), "units"))
 
-            def sign(a=ally, w=win):
-                if self.money < 50_000_000:
-                    self.log_event("Need $50,000,000 to sign an alliance.")
-                    return
-                if self.alliance == a:
-                    self.log_event(f"Already allied with {a}.")
-                    return
-                self.money -= 50_000_000
-                self.market.money = self.money
-                self.alliance = a
-                self.alliance_days = 30
-                self.log_event(f"Alliance signed with {a}! 30% discount on eligible countries for 30 days.")
-                self._add_ticker(f"DIPLOMACY: New strategic alliance formed with {a}...")
-                self.update_status()
-                w.destroy()
-                self.open_alliance_window()
+        for ally, adata in self._ALLIANCE_DATA.items():
+            color = adata["color"]
+            section = tk.Frame(inner, bg="#0e1117")
+            section.pack(fill="x", padx=14, pady=6)
+            tk.Label(section, text=f"  {ally}", font=("Arial", 13, "bold"),
+                     bg="#0e1117", fg=color).pack(anchor="w")
 
-            active = self.alliance == ally
-            tk.Button(row,
-                      text="ACTIVE" if active else "Sign ($50M)",
-                      font=("Arial", 9, "bold"),
-                      bg="#00ff90" if active else "#4499ff",
-                      fg="black" if active else "white",
-                      relief="flat", padx=10, pady=4,
-                      state="disabled" if active else "normal",
-                      command=sign).pack(side="right")
+            for t_idx, tier in enumerate(adata["tiers"]):
+                is_active = (self.alliance == ally and
+                             getattr(self, "alliance_tier", 0) == t_idx)
+                is_upgrade = (self.alliance == ally and
+                              getattr(self, "alliance_tier", 0) == 0 and t_idx == 1)
+                row = tk.Frame(section, bg="#1e2130", pady=8, padx=12)
+                row.pack(fill="x", pady=3)
+
+                info = tk.Frame(row, bg="#1e2130")
+                info.pack(side="left", fill="both", expand=True)
+
+                tier_color = "#00ff90" if is_active else color
+                tk.Label(info,
+                         text=f"{tier['label']} Tier  —  ${tier['cost']//1_000_000}M  |  {tier['days']} days",
+                         font=("Arial", 10, "bold"), bg="#1e2130", fg=tier_color).pack(anchor="w")
+                for perk in tier["perks"]:
+                    tk.Label(info, text=f"  • {perk}", font=("Arial", 8),
+                             bg="#1e2130", fg="#888").pack(anchor="w")
+
+                if is_active:
+                    btn_text, btn_bg, btn_state = "ACTIVE", "#00ff90", "disabled"
+                elif is_upgrade:
+                    btn_text, btn_bg, btn_state = "Upgrade", "#ff9900", "normal"
+                else:
+                    btn_text = "Sign" if not (self.alliance == ally) else "Renew"
+                    btn_bg   = color
+                    btn_state = "normal"
+
+                def sign(a=ally, ti=t_idx, cost=tier["cost"], days=tier["days"], w=win):
+                    if self.money < cost:
+                        self.log_event(f"Need ${cost:,} to sign this alliance tier.")
+                        return
+                    # Loyalty renewal discount (renewing before expiry, same ally)
+                    actual_cost = int(cost * 0.8) if (self.alliance == a and self.alliance_days > 0) else cost
+                    self.money -= actual_cost
+                    self.market.money = self.money
+                    self.alliance      = a
+                    self.alliance_tier = ti
+                    self.alliance_days = days
+                    tier_name = self._ALLIANCE_DATA[a]["tiers"][ti]["label"]
+                    self.log_event(
+                        f"Alliance signed: {a} [{tier_name}] for {days} days. "
+                        f"Cost: ${actual_cost:,}"
+                        + (" (loyalty renewal 20% off)" if actual_cost < cost else "")
+                    )
+                    self._add_ticker(f"DIPLOMACY: Strategic pact formed with {a} [{tier_name}]...")
+                    self.update_status()
+                    w.destroy()
+                    self.open_alliance_window()
+
+                tk.Button(row, text=btn_text, font=("Arial", 9, "bold"),
+                          bg=btn_bg, fg="black" if is_active else "white",
+                          relief="flat", padx=10, pady=4,
+                          state=btn_state, command=sign).pack(side="right", padx=4)
 
     # =========================================================
     # WAR EVENTS  (called from main_loop)

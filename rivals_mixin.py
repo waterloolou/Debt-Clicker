@@ -18,10 +18,15 @@ class RivalsMixin:
         }
 
     def process_rivals(self):
+        if getattr(self, "is_multiplayer", False):
+            return  # real player states come from network updates
         from world_map_mixin import RESOURCE_DATA
         for name, rival in self.rivals.items():
-            rival["money"] *= random.uniform(0.99, 1.03)
-            if random.random() < 0.06:
+            # Rivals grow wealth more aggressively — 1–5% per day
+            rival["money"] *= random.uniform(0.99, 1.05)
+
+            # Seize a country (15% chance per day, up from 6%)
+            if random.random() < 0.15:
                 resource = random.choice(list(RESOURCE_DATA.keys()))
                 countries = list(RESOURCE_DATA[resource]["countries"].keys())
                 occupied_by_rivals = set()
@@ -39,44 +44,240 @@ class RivalsMixin:
                         rival["controls"].setdefault(resource, set()).add(target)
                         self.log_event(f"RIVAL: {name} seized {resource} ops in {target}!")
                         self._add_ticker(f"MARKETS: {name} acquires {resource} stake in {target}...")
-            # Random release
+
+            # Direct attack on the player (8% chance per day)
+            if random.random() < 0.08:
+                self._rival_attack_player(name, rival)
+
+            # Random release (slower — rivals hold territory longer)
             for res in list(rival["controls"].keys()):
-                to_release = {c for c in rival["controls"][res] if random.random() < 0.025}
+                to_release = {c for c in rival["controls"][res] if random.random() < 0.01}
                 rival["controls"][res] -= to_release
 
-    def open_rivals_window(self):
+    def _rival_attack_player(self, name, rival):
+        """A rival launches a targeted action against the player."""
+        color  = rival.get("color", "#cc44ff")
+        attack = random.choice(["smear", "lobby", "sabotage", "poach", "lawsuit"])
+
+        # Alliance may intercept the attack
+        block_chance = self.get_alliance_block_chance(attack)
+        if block_chance > 0 and random.random() < block_chance:
+            ally_color = self._ALLIANCE_DATA[self.alliance]["color"]
+            self.log_event(f"ALLIANCE: {self.alliance} intercepted {name}'s {attack} attack!")
+            self._show_rival_attack_popup(
+                f"{self.alliance} Intelligence", ally_color,
+                "Attack Intercepted",
+                f"Your {self.alliance} alliance blocked {name}'s {attack} operation.\n\nNo damage taken.")
+            return
+
+        if attack == "smear":
+            # PR smear campaign — hits public opinion
+            hit = random.randint(5, 15)
+            self.public_opinion = max(0, self.public_opinion - hit)
+            self.log_event(f"RIVAL: {name} funded a smear campaign against you! "
+                           f"Public opinion -{hit}%")
+            self._add_ticker(f"BREAKING: Anonymous sources question {self.username}'s ethics...")
+            self._show_rival_attack_popup(name, color,
+                f"Smear Campaign",
+                f"{name} paid journalists to run hit pieces on you.\n\nPublic Opinion -{hit}%")
+
+        elif attack == "lobby":
+            # Lobby regulators — raises your transgressions
+            hit = random.randint(8, 20)
+            self.add_transgression(hit, 10)
+            self.log_event(f"RIVAL: {name} tipped off regulators! Transgressions +{hit}")
+            self._show_rival_attack_popup(name, color,
+                "Regulatory Tip-Off",
+                f"{name} gave your file to federal regulators.\n\nTransgressions +{hit}")
+
+        elif attack == "sabotage":
+            # Sabotage an active operation
+            if self.oil_operations:
+                op = random.choice(self.oil_operations)
+                lost = op["income"] * random.randint(3, 7)
+                self.money -= lost
+                self.market.money = self.money
+                self.log_event(f"RIVAL: {name} sabotaged your {op['resource']} operation "
+                               f"in {op['country']}! Lost ${lost:,.0f}")
+                self._show_rival_attack_popup(name, color,
+                    "Operation Sabotaged",
+                    f"{name} sent agents to disrupt your {op['resource']} "
+                    f"operation in {op['country']}.\n\n-${lost:,.0f}")
+            else:
+                # No ops — just steal money directly
+                stolen = int(self.money * random.uniform(0.01, 0.04))
+                self.money -= stolen
+                self.market.money = self.money
+                self.log_event(f"RIVAL: {name} laundered money through your accounts! "
+                               f"-${stolen:,}")
+                self._show_rival_attack_popup(name, color,
+                    "Financial Sabotage",
+                    f"{name} ran a fraudulent wire through your shell accounts.\n\n"
+                    f"-${stolen:,}")
+
+        elif attack == "poach":
+            # Poach your happiness (bribe your staff / personal attacks)
+            hit = random.randint(5, 12)
+            self.happiness = max(0, self.happiness - hit)
+            self.log_event(f"RIVAL: {name} poached your key staff and spread rumors. "
+                           f"Happiness -{hit}")
+            self._show_rival_attack_popup(name, color,
+                "Staff Poached",
+                f"{name} headhunted your best people and fed gossip to tabloids.\n\n"
+                f"Happiness -{hit}")
+
+        elif attack == "lawsuit":
+            # File a lawsuit — costs money and transgressions
+            fine  = int(self.money * random.uniform(0.02, 0.06))
+            trans = random.randint(5, 12)
+            self.money -= fine
+            self.market.money = self.money
+            self.add_transgression(trans, 8)
+            self.log_event(f"RIVAL: {name} filed a lawsuit against you! "
+                           f"-${fine:,} | Transgressions +{trans}")
+            self._show_rival_attack_popup(name, color,
+                "Lawsuit Filed",
+                f"{name}'s legal team has filed a federal lawsuit against you.\n\n"
+                f"-${fine:,}  |  Transgressions +{trans}")
+
+        self.update_status()
+
+    def _show_rival_attack_popup(self, rival_name, color, title, body):
+        """Dramatic popup shown when a rival attacks you."""
         win = tk.Toplevel(self.root)
-        win.title("Rival Billionaires")
+        win.title("Rival Action")
+        win.configure(bg="#0e1117")
+        win.geometry("380x220")
+        win.resizable(False, False)
+        win.attributes("-topmost", True)
+
+        tk.Frame(win, bg=color, height=6).pack(fill="x")
+        tk.Label(win, text=f"⚠  {title.upper()}",
+                 font=("Impact", 18), bg="#0e1117", fg=color).pack(pady=(14, 2))
+        tk.Label(win, text=f"— {rival_name} —",
+                 font=("Arial", 10, "italic"), bg="#0e1117", fg="#888").pack()
+        tk.Label(win, text=body,
+                 font=("Arial", 10), bg="#0e1117", fg="white",
+                 wraplength=340, justify="center").pack(pady=12)
+        tk.Button(win, text="Noted", font=("Arial", 10),
+                  bg=color, fg="white", relief="flat", padx=20, pady=4,
+                  command=win.destroy).pack(pady=(0, 14))
+        tk.Frame(win, bg=color, height=4).pack(fill="x")
+
+    def open_rivals_window(self):
+        is_mp = getattr(self, "is_multiplayer", False)
+
+        win = tk.Toplevel(self.root)
+        win.title("Rival Players" if is_mp else "Rival Billionaires")
         win.configure(bg="#0e1117")
         win.geometry("520x420")
         win.resizable(False, False)
 
-        tk.Label(win, text="RIVAL BILLIONAIRES",
-                 font=("Impact", 22), bg="#0e1117", fg="#cc44ff").pack(pady=(18, 2))
-        tk.Label(win, text="They're hunting the same resources as you.",
-                 font=("Arial", 9), bg="#0e1117", fg="#666").pack(pady=(0, 12))
+        if is_mp:
+            tk.Label(win, text="RIVAL PLAYERS",
+                     font=("Impact", 22), bg="#0e1117", fg="#1e90ff").pack(pady=(18, 2))
+            tk.Label(win, text="Real opponents — live stats from the network.",
+                     font=("Arial", 9), bg="#0e1117", fg="#666").pack(pady=(0, 12))
+        else:
+            tk.Label(win, text="RIVAL BILLIONAIRES",
+                     font=("Impact", 22), bg="#0e1117", fg="#cc44ff").pack(pady=(18, 2))
+            tk.Label(win, text="They're hunting the same resources as you.",
+                     font=("Arial", 9), bg="#0e1117", fg="#666").pack(pady=(0, 12))
 
         for name, rival in self.rivals.items():
             row = tk.Frame(win, bg="#1e2130", pady=10, padx=14)
             row.pack(fill="x", padx=16, pady=5)
 
-            tk.Label(row, text=name, font=("Arial", 12, "bold"),
-                     bg="#1e2130", fg=rival["color"]).pack(anchor="w")
+            color = rival.get("color", "#aaaaaa")
+            display_name = name
+            if is_mp and rival.get("disconnected"):
+                display_name = f"{name}  [DISCONNECTED]"
+                color = "#555555"
+
+            tk.Label(row, text=display_name, font=("Arial", 12, "bold"),
+                     bg="#1e2130", fg=color).pack(anchor="w")
             tk.Label(row, text=f"Net worth: ${rival['money']:,.0f}",
                      font=("Arial", 9), bg="#1e2130", fg="#aaaaaa").pack(anchor="w")
 
-            controlled = []
-            for res, ctries in rival["controls"].items():
-                for c in ctries:
-                    controlled.append(f"{c} ({res})")
-
-            if controlled:
-                tk.Label(row, text="Controls: " + ", ".join(controlled[:5]),
+            if is_mp:
+                # Show real live stats for multiplayer rivals
+                country       = rival.get("country", "—")
+                days          = rival.get("days", 0)
+                happiness     = rival.get("happiness", 0)
+                opinion       = rival.get("public_opinion", 0)
+                transgressions = rival.get("transgressions", 0)
+                tk.Label(row,
+                         text=(f"Country: {country}  |  Day {days}  |  "
+                               f"Happiness: {int(happiness)}%  |  "
+                               f"Opinion: {int(opinion)}%  |  "
+                               f"Transgressions: {int(transgressions)}"),
                          font=("Arial", 8), bg="#1e2130", fg="#888888",
-                         wraplength=380, justify="left").pack(anchor="w")
+                         wraplength=460, justify="left").pack(anchor="w")
             else:
-                tk.Label(row, text="Controls: nothing yet",
-                         font=("Arial", 8), bg="#1e2130", fg="#555").pack(anchor="w")
+                controlled = []
+                for res, ctries in rival.get("controls", {}).items():
+                    for c in ctries:
+                        controlled.append(f"{c} ({res})")
+
+                if controlled:
+                    tk.Label(row, text="Controls: " + ", ".join(controlled[:5]),
+                             font=("Arial", 8), bg="#1e2130", fg="#888888",
+                             wraplength=380, justify="left").pack(anchor="w")
+                else:
+                    tk.Label(row, text="Controls: nothing yet",
+                             font=("Arial", 8), bg="#1e2130", fg="#555").pack(anchor="w")
+
+    def _rival_retaliate(self, rival_name, rival, country, resource):
+        """Immediate retaliation when player bombs a country a rival controls."""
+        color = rival.get("color", "#cc44ff")
+        retaliation = random.choice(["fine", "smear", "counter_op"])
+
+        if retaliation == "fine":
+            fine = int(self.money * random.uniform(0.03, 0.08))
+            self.money -= fine
+            self.market.money = self.money
+            self.add_transgression(10, 8)
+            self.log_event(f"RETALIATION: {rival_name} filed an injunction over {country}! "
+                           f"-${fine:,} | Transgressions +10")
+            self._show_rival_attack_popup(rival_name, color,
+                "Retaliation: Legal Injunction",
+                f"{rival_name} had lawyers waiting.\nYou seized their {resource} ops in {country}.\n\n"
+                f"-${fine:,}  |  Transgressions +10")
+
+        elif retaliation == "smear":
+            opinion_hit = random.randint(10, 20)
+            happiness_hit = random.randint(5, 10)
+            self.public_opinion = max(0, self.public_opinion - opinion_hit)
+            self.happiness      = max(0, self.happiness - happiness_hit)
+            self.log_event(f"RETALIATION: {rival_name} launched a counter-PR blitz! "
+                           f"Opinion -{opinion_hit} | Happiness -{happiness_hit}")
+            self._show_rival_attack_popup(rival_name, color,
+                "Retaliation: PR Blitz",
+                f"{rival_name} is furious about {country}.\nThey've gone to every news outlet.\n\n"
+                f"Opinion -{opinion_hit}  |  Happiness -{happiness_hit}")
+
+        elif retaliation == "counter_op":
+            # Rival seizes one of your active operations
+            if self.oil_operations:
+                op = random.choice(self.oil_operations)
+                self.oil_operations.remove(op)
+                self.log_event(f"RETALIATION: {rival_name} seized your {op['resource']} "
+                               f"operation in {op['country']}!")
+                self._show_rival_attack_popup(rival_name, color,
+                    "Retaliation: Operation Seized",
+                    f"{rival_name} counter-attacked your {op['resource']} "
+                    f"operation in {op['country']}.\n\nOperation lost.")
+            else:
+                stolen = int(self.money * random.uniform(0.02, 0.05))
+                self.money -= stolen
+                self.market.money = self.money
+                self.log_event(f"RETALIATION: {rival_name} hit your accounts — -${stolen:,}")
+                self._show_rival_attack_popup(rival_name, color,
+                    "Retaliation: Financial Strike",
+                    f"{rival_name} couldn't seize your ops but hit your accounts.\n\n"
+                    f"-${stolen:,}")
+
+        self.update_status()
 
     def is_rival_controlled(self, resource, country):
         """Returns rival name if a rival controls this country, else None."""
