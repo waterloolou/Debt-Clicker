@@ -362,24 +362,29 @@ class ScreensMixin:
     def _build_game_screen(self):
         frame = tk.Frame(self.root, bg="#0e1117")
 
+        # ── Top bar: money (left) + clock + day (right) ────────
         top = tk.Frame(frame, bg="#0e1117")
-        top.pack(fill="x", padx=16, pady=(12, 4))
+        top.pack(fill="x", padx=20, pady=(16, 6))
 
         self.money_label = tk.Label(top, text="Money: $100,000,000",
-                                    font=("Arial", 15, "bold"), bg="#0e1117", fg="#00ff90")
+                                    font=("Arial", 22, "bold"), bg="#0e1117", fg="#00ff90")
         self.money_label.pack(side="left")
 
-        self.day_label = tk.Label(top, text="Day 0",
-                                  font=("Arial", 11), bg="#0e1117", fg="#aaaaaa")
-        self.day_label.pack(side="right", padx=(0, 8))
+        right_top = tk.Frame(top, bg="#0e1117")
+        right_top.pack(side="right")
 
-        self.clock_canvas = tk.Canvas(top, width=60, height=60,
+        self.day_label = tk.Label(right_top, text="Day 0",
+                                  font=("Arial", 14), bg="#0e1117", fg="#aaaaaa")
+        self.day_label.pack(side="right", padx=(8, 0))
+
+        self.clock_canvas = tk.Canvas(right_top, width=52, height=52,
                                       bg="#0e1117", highlightthickness=0)
         self.clock_canvas.pack(side="right")
         self._draw_clock()
 
+        # ── Primary action buttons ──────────────────────────────
         btn_frame = tk.Frame(frame, bg="#0e1117")
-        btn_frame.pack(pady=6)
+        btn_frame.pack(pady=(0, 4))
 
         for text, cmd in [
             ("Work",         self.work),
@@ -389,80 +394,82 @@ class ScreensMixin:
             ("World Map",    self.open_world_map),
         ]:
             tk.Button(btn_frame, text=text,
-                      font=("Arial", 10), bg="#1e2130", fg="white",
+                      font=("Arial", 11, "bold"), bg="#1e2130", fg="white",
                       activebackground="#2e3140", relief="flat",
-                      padx=14, pady=5,
+                      padx=18, pady=7,
                       command=cmd).pack(side="left", padx=6)
 
+        # ── Secondary action buttons ────────────────────────────
         btn_frame2 = tk.Frame(frame, bg="#0e1117")
-        btn_frame2.pack(pady=(0, 4))
+        btn_frame2.pack(pady=(0, 6))
 
         for text, cmd in [
-            ("Lobby",       self.open_lobby),
-            ("Black Market",self.open_black_market),
-            ("Debt",        self.open_debt_window),
-            ("Rivals",      self.open_rivals_window),
-            ("Net Worth",   self.open_net_worth_graph),
-            ("Alliance",    self.open_alliance_window),
-            ("💬 Chat",     self.open_chat_window),
-            ("⚔️ War Room", self.open_war_room),
+            ("Lobby",        self.open_lobby),
+            ("Black Market", self.open_black_market),
+            ("Debt",         self.open_debt_window),
+            ("Rivals",       self.open_rivals_window),
+            ("Net Worth",    self.open_net_worth_graph),
+            ("Alliance",     self.open_alliance_window),
+            ("💬 Chat",      self.open_chat_window),
+            ("⚔️ War Room",  self.open_war_room),
         ]:
             tk.Button(btn_frame2, text=text,
-                      font=("Arial", 9), bg="#151820", fg="#aaaaaa",
+                      font=("Arial", 10), bg="#151820", fg="#aaaaaa",
                       activebackground="#2e3140", relief="flat",
-                      padx=10, pady=4,
+                      padx=12, pady=5,
                       command=cmd).pack(side="left", padx=4)
 
-        # ── Stat bars ──────────────────────────────────────────
+        # ── Stat bars ───────────────────────────────────────────
         bars_frame = tk.Frame(frame, bg="#0e1117")
-        bars_frame.pack(fill="x", padx=12, pady=(0, 4))
+        bars_frame.pack(fill="x", padx=16, pady=(0, 4))
 
         def _make_bar(parent, label, init_val, color):
             col = tk.Frame(parent, bg="#0e1117")
-            col.pack(side="left", expand=True, fill="x", padx=5)
+            col.pack(side="left", expand=True, fill="x", padx=6)
 
             hdr = tk.Frame(col, bg="#0e1117")
             hdr.pack(fill="x")
-            tk.Label(hdr, text=label, font=("Arial", 7),
-                     bg="#0e1117", fg="#555").pack(side="left")
+            tk.Label(hdr, text=label, font=("Arial", 9),
+                     bg="#0e1117", fg="#888").pack(side="left")
             val_lbl = tk.Label(hdr, text=str(init_val),
-                               font=("Arial", 7, "bold"), bg="#0e1117", fg=color)
+                               font=("Arial", 9, "bold"), bg="#0e1117", fg=color)
             val_lbl.pack(side="right")
 
-            track = tk.Frame(col, bg="#1a1a2e", height=8)
+            track = tk.Frame(col, bg="#1a1a2e", height=14)
             track.pack(fill="x")
             track.pack_propagate(False)
-            fill = tk.Frame(track, bg=color, height=8)
+            fill = tk.Frame(track, bg=color, height=14)
             fill.place(relx=0, rely=0, relheight=1, relwidth=max(0.001, init_val / 100))
             return fill, val_lbl
 
-        self._bar_happy_fill,  self._bar_happy_lbl  = _make_bar(bars_frame, "Happiness",      50, "#00ff90")
-        self._bar_opinion_fill, self._bar_opinion_lbl = _make_bar(bars_frame, "Public Opinion", 75, "#4499ff")
-        self._bar_trans_fill,  self._bar_trans_lbl  = _make_bar(bars_frame, "Transgressions",   0, "#ff9900")
+        self._bar_happy_fill,   self._bar_happy_lbl   = _make_bar(bars_frame, "Happiness",       50, "#00ff90")
+        self._bar_opinion_fill, self._bar_opinion_lbl = _make_bar(bars_frame, "Public Opinion",   75, "#4499ff")
+        self._bar_trans_fill,   self._bar_trans_lbl   = _make_bar(bars_frame, "Transgressions",    0, "#ff9900")
 
-        # Infamy + Wanted status line
+        # ── Infamy + Wanted status line ─────────────────────────
         status2 = tk.Frame(frame, bg="#0e1117")
-        status2.pack(fill="x", padx=12, pady=(0, 2))
-        self._infamy_label  = tk.Label(status2, text="TIER 0: Nobody",
-                                        font=("Arial", 7, "bold"), bg="#0e1117", fg="#555")
+        status2.pack(fill="x", padx=16, pady=(2, 2))
+        self._infamy_label = tk.Label(status2, text="TIER 0: Nobody",
+                                      font=("Arial", 8, "bold"), bg="#0e1117", fg="#555")
         self._infamy_label.pack(side="left")
-        self._wanted_label  = tk.Label(status2, text="Wanted: Clean",
-                                        font=("Arial", 7, "bold"), bg="#0e1117", fg="#555")
+        self._wanted_label = tk.Label(status2, text="Wanted: Clean",
+                                      font=("Arial", 8, "bold"), bg="#0e1117", fg="#555")
         self._wanted_label.pack(side="right")
 
-        # News ticker
-        ticker_frame = tk.Frame(frame, bg="#1a1a0a", height=18)
-        ticker_frame.pack(fill="x", padx=0, pady=0)
+        # ── News ticker (centered, scrolling) ──────────────────
+        ticker_frame = tk.Frame(frame, bg="#1a1a0a", height=24)
+        ticker_frame.pack(fill="x", pady=(2, 0))
         ticker_frame.pack_propagate(False)
-        self._ticker_label = tk.Label(ticker_frame, text="  DEBT CLICKER NEWS  |  Your empire begins its descent...  ",
-                                       font=("Consolas", 8), bg="#1a1a0a", fg="#ffaa00",
-                                       anchor="w")
-        self._ticker_label.pack(side="left", fill="y")
+        self._ticker_label = tk.Label(ticker_frame, text="",
+                                      font=("Consolas", 10), bg="#1a1a0a", fg="#ffaa00",
+                                      anchor="center")
+        self._ticker_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._ticker_text = "  DEBT CLICKER NEWS  |  Your empire begins its descent...  "
         self._ticker_pos  = 0
         self._ticker_queue = []
         self._scroll_ticker()
 
+        # ── Event log ──────────────────────────────────────────
         self.log = scrolledtext.ScrolledText(frame, height=20, state="disabled",
                                              bg="#0a0d13", fg="#cccccc",
                                              font=("Consolas", 10), relief="flat",
@@ -786,16 +793,17 @@ class ScreensMixin:
         while self._ticker_queue:
             self._ticker_text += "   |   " + self._ticker_queue.pop(0)
 
-        # Scroll: show a 60-char window into the text
-        display = (self._ticker_text + "   ") * 2
-        pos = self._ticker_pos % len(self._ticker_text + "   ")
-        snippet = display[pos:pos+80]
+        # Scroll: show a 100-char centered window into the text
+        base = self._ticker_text + "     "
+        display = base * 3
+        pos = self._ticker_pos % len(base)
+        snippet = display[pos:pos + 100]
         try:
             self._ticker_label.config(text=snippet)
         except Exception:
             return
         self._ticker_pos += 1
-        self.root.after(80, self._scroll_ticker)
+        self.root.after(75, self._scroll_ticker)
 
     def _add_ticker(self, text):
         """Add a headline to the news ticker queue."""
