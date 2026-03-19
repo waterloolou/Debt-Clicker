@@ -118,6 +118,12 @@ class ScreensMixin:
                   padx=20, pady=5,
                   command=self._open_wiki).pack(side="left", padx=8)
 
+        tk.Button(bottom_row, text="Tutorial",
+                  font=("Arial", 10), bg="#1e4020", fg="#aaffaa",
+                  activebackground="#2e5030", relief="flat",
+                  padx=20, pady=5,
+                  command=self.open_tutorial).pack(side="left", padx=8)
+
         return frame
 
     # =========================================================

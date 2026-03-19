@@ -546,11 +546,20 @@ class CasinoMixin:
                                          relief="flat", padx=18, pady=6,
                                          command=self._poker_deal)
         self._poker_deal_btn.pack(side="left", padx=8)
+
+        self._poker_peek_btn = tk.Button(btn_frame, text="Peek (1%)",
+                                         font=("Arial", 10), bg="#886600", fg="white",
+                                         relief="flat", padx=12, pady=6,
+                                         command=self._poker_peek)
+        self._poker_peek_btn.pack(side="left", padx=4)
+
         self._poker_draw_btn = tk.Button(btn_frame, text="Draw",
                                          font=("Arial", 11, "bold"), bg="#1e2130", fg="#555555",
                                          relief="flat", padx=18, pady=6, state="disabled",
                                          command=self._poker_draw)
         self._poker_draw_btn.pack(side="left", padx=8)
+
+        self._poker_peeked = False
 
         self._poker_deck = []
 
@@ -596,12 +605,50 @@ class CasinoMixin:
         self._poker_hand = [self._poker_deck.pop() for _ in range(5)]
         self._poker_held = [False] * 5
         self._poker_phase = "hold"
+        self._poker_peeked = False
+        self._poker_peek_btn.config(state="disabled", bg="#444", fg="#888")
 
         self._poker_result.config(text="Select cards to HOLD, then click Draw.", fg="#aaaaaa")
         self._poker_deal_btn.config(state="disabled")
         self._poker_draw_btn.config(state="normal", bg="#00aa44", fg="white")
         self._poker_bet_entry.config(state="disabled")
         self._render_poker_cards()
+
+    def _poker_peek(self):
+        """Pay 1% of balance to reveal one random card before betting."""
+        peek_cost = max(1, int(self.money * 0.01))
+        if self.money < peek_cost:
+            self._poker_result.config(text="Not enough money to peek.", fg="#ff4444")
+            return
+        self.money -= peek_cost
+        self.market.money = self.money
+        self.update_status()
+        self._poker_peeked = True
+        self._poker_peek_btn.config(state="disabled", bg="#444", fg="#888")
+
+        # Deal a peek hand silently (not deducting bet yet) to reveal one card
+        self._poker_new_deck()
+        peek_hand = [self._poker_deck.pop() for _ in range(5)]
+        reveal_idx = random.randint(0, 4)
+        rank, suit = peek_hand[reveal_idx]
+        color = self.SUIT_COLORS[suit]
+
+        # Show the one revealed card, others stay face-down
+        for i, c in enumerate(self._poker_canvases):
+            if i == reveal_idx:
+                c.delete("all")
+                c.configure(bg="#fff8e1", highlightbackground="#886600")
+                c.create_text(8, 10, text=rank, anchor="nw", font=("Arial", 11, "bold"), fill=color)
+                c.create_text(36, 50, text=suit, anchor="center", font=("Arial", 28), fill=color)
+                c.create_text(64, 90, text=rank, anchor="se", font=("Arial", 11, "bold"), fill=color)
+                c.create_text(36, 86, text="PEEK", anchor="s", font=("Arial", 7), fill="#886600")
+            else:
+                self._draw_card_back(c)
+
+        self._poker_result.config(
+            text=f"Peeked at card {reveal_idx+1}: {rank}{suit}  |  Cost: ${peek_cost:,}",
+            fg="#ffcc44")
+        self.log_event(f"Poker peek: revealed {rank}{suit}, cost ${peek_cost:,}")
 
     def _poker_draw(self):
         for i in range(5):
@@ -611,6 +658,7 @@ class CasinoMixin:
         self._poker_phase = "bet"
         self._render_poker_cards()
         self._poker_deal_btn.config(state="normal", bg="#00aa44", fg="white")
+        self._poker_peek_btn.config(state="normal", bg="#886600", fg="white")
         self._poker_draw_btn.config(state="disabled", bg="#1e2130", fg="#555555")
         self._poker_bet_entry.config(state="normal")
         self._evaluate_poker()
