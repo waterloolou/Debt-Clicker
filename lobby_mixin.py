@@ -93,7 +93,7 @@ class LobbyMixin:
         tk.Label(info, text=f"Cost: ${tier['cost']:,}", font=("Arial", 8),
                  bg="#1e2130", fg="#555577", anchor="w").pack(anchor="w", pady=(2, 0))
 
-        def do_buy(t=tier, w=win):
+        def do_buy(t=tier, btn_ref=[None]):
             if t["once"] and t["id"] == "senate_immunity" and getattr(self, "lobby_immunity", False):
                 return
             if self.money < t["cost"]:
@@ -105,7 +105,6 @@ class LobbyMixin:
             if "transgression" in eff:
                 self.transgressions = max(0, min(100, self.transgressions + eff["transgression"]))
             if "opinion" in eff:
-                # 999 = set to 80 cap; otherwise add normally
                 if eff["opinion"] == 999:
                     self.public_opinion = min(100, max(self.public_opinion, 80))
                 else:
@@ -113,16 +112,18 @@ class LobbyMixin:
             if "immunity" in eff:
                 self.lobby_immunity = True
                 self.log_event("Senate Immunity active — next bad event is blocked.")
+                if btn_ref[0]:
+                    btn_ref[0].config(text="USED", state="disabled", bg="#333", fg="#555")
             self._update_bars()
             self.update_status()
             self.log_event(f"Lobby: {t['name']} — ${t['cost']:,} spent.")
             self._add_ticker("BREAKING: Political sources confirm lobbying activity...")
-            w.destroy()
-            self.open_lobby()
 
         state = "disabled" if already_used else "normal"
-        tk.Button(row, text="USED" if already_used else "Buy",
-                  font=("Arial", 10, "bold"), bg="#333" if already_used else "#ffaa00",
-                  fg="#555" if already_used else "black",
-                  relief="flat", padx=14, pady=5,
-                  state=state, command=do_buy).pack(side="right")
+        btn = tk.Button(row, text="USED" if already_used else "Buy",
+                        font=("Arial", 10, "bold"), bg="#333" if already_used else "#ffaa00",
+                        fg="#555" if already_used else "black",
+                        relief="flat", padx=14, pady=5,
+                        state=state, command=do_buy)
+        btn.pack(side="right")
+        do_buy.__defaults__[1][0] = btn  # store ref so senate immunity can update it
