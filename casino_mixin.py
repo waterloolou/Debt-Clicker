@@ -601,12 +601,17 @@ class CasinoMixin:
         self.update_status()
 
         self._poker_current_bet = bet
-        self._poker_new_deck()
-        self._poker_hand = [self._poker_deck.pop() for _ in range(5)]
-        self._poker_held = [False] * 5
         self._poker_phase = "hold"
-        self._poker_peeked = False
         self._poker_peek_btn.config(state="disabled", bg="#444", fg="#888")
+
+        if self._poker_peeked:
+            # Hand was already dealt during peek — just reveal it
+            self._poker_peeked = False
+        else:
+            # Fresh deal
+            self._poker_new_deck()
+            self._poker_hand = [self._poker_deck.pop() for _ in range(5)]
+            self._poker_held = [False] * 5
 
         self._poker_result.config(text="Select cards to HOLD, then click Draw.", fg="#aaaaaa")
         self._poker_deal_btn.config(state="disabled")
@@ -615,7 +620,7 @@ class CasinoMixin:
         self._render_poker_cards()
 
     def _poker_peek(self):
-        """Pay 1% of balance to reveal one random card before betting."""
+        """Pay 1% of balance to reveal one card from the actual hand before betting."""
         peek_cost = max(1, int(self.money * 0.01))
         if self.money < peek_cost:
             self._poker_result.config(text="Not enough money to peek.", fg="#ff4444")
@@ -626,29 +631,31 @@ class CasinoMixin:
         self._poker_peeked = True
         self._poker_peek_btn.config(state="disabled", bg="#444", fg="#888")
 
-        # Deal a peek hand silently (not deducting bet yet) to reveal one card
+        # Deal the REAL hand now so the peeked card is guaranteed to be in it
         self._poker_new_deck()
-        peek_hand = [self._poker_deck.pop() for _ in range(5)]
-        reveal_idx = random.randint(0, 4)
-        rank, suit = peek_hand[reveal_idx]
+        self._poker_hand = [self._poker_deck.pop() for _ in range(5)]
+        self._poker_held = [False] * 5
+
+        self._poker_peek_idx = random.randint(0, 4)
+        rank, suit = self._poker_hand[self._poker_peek_idx]
         color = self.SUIT_COLORS[suit]
 
-        # Show the one revealed card, others stay face-down
+        # Show the one revealed card, rest stay face-down
         for i, c in enumerate(self._poker_canvases):
-            if i == reveal_idx:
+            if i == self._poker_peek_idx:
                 c.delete("all")
                 c.configure(bg="#fff8e1", highlightbackground="#886600")
-                c.create_text(8, 10, text=rank, anchor="nw", font=("Arial", 11, "bold"), fill=color)
+                c.create_text(8,  10, text=rank, anchor="nw", font=("Arial", 11, "bold"), fill=color)
                 c.create_text(36, 50, text=suit, anchor="center", font=("Arial", 28), fill=color)
                 c.create_text(64, 90, text=rank, anchor="se", font=("Arial", 11, "bold"), fill=color)
-                c.create_text(36, 86, text="PEEK", anchor="s", font=("Arial", 7), fill="#886600")
+                c.create_text(36, 92, text="PEEK", anchor="s", font=("Arial", 7), fill="#886600")
             else:
                 self._draw_card_back(c)
 
         self._poker_result.config(
-            text=f"Peeked at card {reveal_idx+1}: {rank}{suit}  |  Cost: ${peek_cost:,}",
+            text=f"Peeked: card {self._poker_peek_idx+1} is {rank}{suit}  |  Cost: ${peek_cost:,}  — Now place your bet and Deal.",
             fg="#ffcc44")
-        self.log_event(f"Poker peek: revealed {rank}{suit}, cost ${peek_cost:,}")
+        self.log_event(f"Poker peek: card {self._poker_peek_idx+1} is {rank}{suit}, cost ${peek_cost:,}")
 
     def _poker_draw(self):
         for i in range(5):
