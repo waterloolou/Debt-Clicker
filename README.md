@@ -2,7 +2,21 @@
 
 > You are in the top 1%. You have become corrupt. Random disasters will destroy your empire. How long can you last?
 
+[![Download](https://img.shields.io/github/v/release/waterloolou/Debt-Clicker?label=Download&logo=github)](https://github.com/waterloolou/Debt-Clicker/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/waterloolou/Debt-Clicker/build-release.yml?label=Build)](https://github.com/waterloolou/Debt-Clicker/actions)
+
 A dark-humour idle/clicker game built in Python with live stock markets, casino mini-games, a world resource map, multiplayer with real-time war mechanics, and 16 deep gameplay systems.
+
+---
+
+## Download (Windows)
+
+1. Go to the [**Releases page**](https://github.com/waterloolou/Debt-Clicker/releases/latest)
+2. Download **DebtClicker-Windows.zip**
+3. Extract it anywhere
+4. Run **DebtClicker.exe**
+
+No Python installation required.
 
 ---
 
