@@ -1,46 +1,42 @@
 # -*- mode: python ; coding: utf-8 -*-
 #
-# PyInstaller spec for Debt Clicker
+# PyInstaller spec for Debt Clicker  (Windows, Linux, macOS)
 # Build with:  python -m PyInstaller debt_clicker.spec
 #
-from PyInstaller.utils.hooks import collect_all, collect_data_files
+import sys
+from PyInstaller.utils.hooks import collect_all
 
-# Collect entire packages that use native extensions or lazy imports
-geopandas_datas,   geopandas_binaries,   geopandas_hiddens   = collect_all('geopandas')
-shapely_datas,     shapely_binaries,     shapely_hiddens     = collect_all('shapely')
-pyproj_datas,      pyproj_binaries,      pyproj_hiddens      = collect_all('pyproj')
-matplotlib_datas,  matplotlib_binaries,  matplotlib_hiddens  = collect_all('matplotlib')
-yfinance_datas,    yfinance_binaries,    yfinance_hiddens    = collect_all('yfinance')
-pandas_datas,      pandas_binaries,      pandas_hiddens      = collect_all('pandas')
+geopandas_d,  geopandas_b,  geopandas_h  = collect_all('geopandas')
+shapely_d,    shapely_b,    shapely_h    = collect_all('shapely')
+pyproj_d,     pyproj_b,     pyproj_h     = collect_all('pyproj')
+matplotlib_d, matplotlib_b, matplotlib_h = collect_all('matplotlib')
+yfinance_d,   yfinance_b,   yfinance_h   = collect_all('yfinance')
+pandas_d,     pandas_b,     pandas_h     = collect_all('pandas')
+
+platform_hidden = ['winsound'] if sys.platform == 'win32' else []
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=(
-        shapely_binaries + pyproj_binaries +
-        geopandas_binaries + matplotlib_binaries +
-        yfinance_binaries + pandas_binaries
+        shapely_b + pyproj_b + geopandas_b +
+        matplotlib_b + yfinance_b + pandas_b
     ),
     datas=(
-        # Game data files
         [('world_countries.gpkg', '.')]
-        + geopandas_datas + shapely_datas + pyproj_datas
-        + matplotlib_datas + yfinance_datas + pandas_datas
+        + geopandas_d + shapely_d + pyproj_d
+        + matplotlib_d + yfinance_d + pandas_d
     ),
     hiddenimports=(
-        geopandas_hiddens + shapely_hiddens + pyproj_hiddens +
-        matplotlib_hiddens + yfinance_hiddens + pandas_hiddens + [
-            # tkinter backend for matplotlib
+        geopandas_h + shapely_h + pyproj_h +
+        matplotlib_h + yfinance_h + pandas_h + [
             'matplotlib.backends.backend_tkagg',
             'matplotlib.backends._backend_tk',
-            # network / multiplayer
             'socket', 'threading', 'json',
-            # audio (Windows only)
-            'winsound',
-            # common stdlib used at runtime
+            'wave', 'struct', 'io', 'subprocess',
             'random', 'datetime', 'os', 'sys', 'pathlib',
             'collections', 'itertools', 'functools',
-        ]
+        ] + platform_hidden
     ),
     hookspath=[],
     hooksconfig={},
@@ -56,13 +52,13 @@ exe = EXE(
     pyz,
     a.scripts,
     [],
-    exclude_binaries=True,       # folder mode — faster startup, smaller delta updates
+    exclude_binaries=True,
     name='DebtClicker',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,               # no terminal window
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

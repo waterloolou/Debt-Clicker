@@ -2,6 +2,13 @@ import tkinter as tk
 import random
 import math
 import threading
+import sys
+import struct
+import wave
+import io
+import subprocess
+import os
+
 try:
     import winsound
     _HAS_WINSOUND = True
@@ -9,20 +16,68 @@ except ImportError:
     _HAS_WINSOUND = False
 
 
+def _make_wav(freqs_durs) -> bytes:
+    """Generate a raw WAV file in memory from a list of (freq_hz, duration_ms) pairs."""
+    sample_rate = 44100
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sample_rate)
+        for freq, dur_ms in freqs_durs:
+            n = int(sample_rate * dur_ms / 1000)
+            import math as _m
+            frames = b''.join(
+                struct.pack('<h', int(28000 * _m.sin(2 * _m.pi * freq * i / sample_rate)))
+                for i in range(n)
+            )
+            w.writeframes(frames)
+    return buf.getvalue()
+
+
 def _play_sound(kind="win"):
-    """Play a non-blocking win / jackpot / loss sound via winsound (Windows only)."""
-    if not _HAS_WINSOUND:
-        return
+    """Play a non-blocking win / jackpot / loss sound (cross-platform)."""
+    SOUNDS = {
+        "jackpot": [(880,80),(1100,80),(1320,80),(1100,60),(1320,60),(1760,300)],
+        "win":     [(880,80),(1100,80),(1320,200)],
+        "loss":    [(440,120),(330,200)],
+    }
+    freqs = SOUNDS.get(kind, SOUNDS["win"])
+
     def _run():
-        if kind == "jackpot":
-            for f, d in [(880,80),(1100,80),(1320,80),(1100,60),(1320,60),(1760,300)]:
+        if _HAS_WINSOUND:
+            for f, d in freqs:
                 winsound.Beep(f, d)
-        elif kind == "win":
-            for f, d in [(880,80),(1100,80),(1320,200)]:
-                winsound.Beep(f, d)
-        elif kind == "loss":
-            for f, d in [(440,120),(330,200)]:
-                winsound.Beep(f, d)
+        elif sys.platform == "darwin":
+            # macOS: write WAV to temp file, play with afplay
+            try:
+                wav = _make_wav(freqs)
+                tmp = "/tmp/_dc_sound.wav"
+                with open(tmp, "wb") as fh:
+                    fh.write(wav)
+                subprocess.run(["afplay", tmp],
+                               check=False, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+        else:
+            # Linux: try paplay (PulseAudio) then aplay (ALSA) then silence
+            try:
+                wav = _make_wav(freqs)
+                tmp = "/tmp/_dc_sound.wav"
+                with open(tmp, "wb") as fh:
+                    fh.write(wav)
+                for player in ("paplay", "aplay"):
+                    if subprocess.run(["which", player],
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL).returncode == 0:
+                        subprocess.run([player, tmp],
+                                       check=False, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL)
+                        break
+            except Exception:
+                pass
+
     threading.Thread(target=_run, daemon=True).start()
 
 
