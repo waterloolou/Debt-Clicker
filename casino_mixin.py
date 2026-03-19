@@ -135,7 +135,9 @@ class CasinoMixin:
         tk.Label(win, text="🔫 Russian Roulette",
                  font=("Impact", 22), bg="#0e1117", fg="#ff2222").pack(pady=(18, 4))
         tk.Label(win, text="1 bullet. 6 chambers. Are you feeling lucky?",
-                 font=("Arial", 9), bg="#0e1117", fg="#888").pack(pady=(0, 12))
+                 font=("Arial", 9), bg="#0e1117", fg="#888").pack(pady=(0, 2))
+        tk.Label(win, text="Max bet: 25% of balance  ($50M cap)",
+                 font=("Arial", 8), bg="#0e1117", fg="#555").pack(pady=(0, 10))
 
         canvas = tk.Canvas(win, width=220, height=220, bg="#0e1117", highlightthickness=0)
         canvas.pack()
@@ -250,6 +252,15 @@ class CasinoMixin:
             bet = float(self._rr_bet_var.get().replace(",", ""))
         except ValueError:
             self._rr_result.config(text="Invalid bet.", fg="#ff4444")
+            return
+        max_bet = min(50_000_000, self.money * 0.25)
+        if bet > max_bet:
+            self._rr_result.config(
+                text=f"Max bet: ${max_bet:,.0f}  (25% of balance, $50M cap)",
+                fg="#ff4444")
+            return
+        if bet > self.money:
+            self._rr_result.config(text="Not enough money.", fg="#ff4444")
             return
 
         self._rr_spinning = False

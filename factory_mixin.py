@@ -199,9 +199,17 @@ class FactoryMixin:
         tk.Label(info, text=stats_txt, font=("Arial", 8),
                  bg="#1a1f2e", fg="#aaaaaa").pack(anchor="w", pady=(2, 4))
 
-        if fac.get("on_strike"):
+        if fac.get("shutdown_days", 0) > 0:
+            tk.Label(info,
+                     text=f"🚫 SHUTDOWN — {fac['shutdown_days']} days remaining  (no income, wages still due)",
+                     font=("Arial", 8, "bold"), bg="#1a1f2e", fg="#ff2222").pack(anchor="w")
+        elif fac.get("on_strike"):
             tk.Label(info, text=f"🪧 ON STRIKE — {fac['strike_days']} days remaining  (income halted)",
                      font=("Arial", 8, "bold"), bg="#1a1f2e", fg="#ff4444").pack(anchor="w")
+        elif fac.get("damaged_days", 0) > 0:
+            tk.Label(info,
+                     text=f"⚠️ DAMAGED — {fac['damaged_days']} days at 50% capacity  (repairs underway)",
+                     font=("Arial", 8, "bold"), bg="#1a1f2e", fg="#ff8800").pack(anchor="w")
 
         # Worker tier buttons
         tier_row = tk.Frame(info, bg="#1a1f2e")
@@ -313,17 +321,35 @@ class FactoryMixin:
 
             fac["days_owned"] = fac.get("days_owned", 0) + 1
 
+            # Tick shutdown (whistleblower / inspection closure)
+            if fac.get("shutdown_days", 0) > 0:
+                fac["shutdown_days"] -= 1
+                if fac["shutdown_days"] == 0:
+                    self.log_event(f"🏭 {ftype['name']} has reopened after forced shutdown.")
+                # No income, still pay wages
+                wages = int(ftype["base_wage_cost"] * worker["wage_mult"])
+                total_wages += wages
+                continue
+
+            # Tick strike
             if fac.get("on_strike"):
                 fac["strike_days"] = max(0, fac["strike_days"] - 1)
                 if fac["strike_days"] == 0:
                     fac["on_strike"] = False
                     self.log_event(f"🏭 Strike at {ftype['name']} has ended — workers return.")
-                # No income during strike
                 wages = int(ftype["base_wage_cost"] * worker["wage_mult"])
                 total_wages += wages
                 continue
 
-            income = int(ftype["income"] * worker["income_mult"])
+            # Tick damage (accident reduced capacity)
+            income_mult_extra = 1.0
+            if fac.get("damaged_days", 0) > 0:
+                fac["damaged_days"] -= 1
+                income_mult_extra = 0.5   # half output while damaged
+                if fac["damaged_days"] == 0:
+                    self.log_event(f"🏭 {ftype['name']} repairs complete — back to full capacity.")
+
+            income = int(ftype["income"] * worker["income_mult"] * income_mult_extra)
             wages  = int(ftype["base_wage_cost"] * worker["wage_mult"])
             total_income += income
             total_wages  += wages
@@ -388,32 +414,40 @@ class FactoryMixin:
                 return
 
         if event == "accident":
-            fine = int(self.money * random.uniform(0.02, 0.06))
-            trans = random.randint(10, 20)
+            fine    = int(self.money * random.uniform(0.02, 0.06))
+            trans   = random.randint(10, 20)
+            dmg_days = random.randint(3, 7)
             self.money -= fine
             self.market.money = self.money
             self.add_transgression(trans, 10)
             self.public_opinion = max(0, self.public_opinion - 15)
+            fac["damaged_days"] = dmg_days          # ← factory at 50% for N days
             self.log_event(
                 f"💥 ACCIDENT at {ftype['name']}! Fine: -${fine:,.0f} | "
-                f"Transgressions +{trans} | Opinion -15")
+                f"Transgressions +{trans} | Opinion -15 | "
+                f"Running at 50% capacity for {dmg_days} days")
             self._show_factory_event(
                 ftype, "#ff2222", "Factory Accident",
                 f"An explosion at your {ftype['name']} has made headlines.\n\n"
-                f"-${fine:,.0f}  |  Transgressions +{trans}  |  Opinion -15")
+                f"-${fine:,.0f}  |  Transgressions +{trans}  |  Opinion -15\n\n"
+                f"Factory running at 50% capacity for {dmg_days} days while repairs complete.")
 
         elif event == "whistleblower":
-            trans = random.randint(12, 25)
+            trans     = random.randint(12, 25)
+            shut_days = random.randint(2, 4)
             self.add_transgression(trans, 8)
             self.public_opinion = max(0, self.public_opinion - 18)
+            fac["shutdown_days"] = shut_days        # ← factory closed for N days
             self.log_event(
                 f"📢 WHISTLEBLOWER at {ftype['name']}! Safety violations exposed. "
-                f"Transgressions +{trans} | Opinion -18")
+                f"Transgressions +{trans} | Opinion -18 | "
+                f"Factory shutdown for {shut_days} days")
             self._show_factory_event(
                 ftype, "#cc44ff", "Whistleblower",
                 f"A worker at your {ftype['name']} has gone to the press\n"
                 f"with evidence of safety violations.\n\n"
-                f"Transgressions +{trans}  |  Public Opinion -18")
+                f"Transgressions +{trans}  |  Public Opinion -18\n\n"
+                f"Regulators have ordered a {shut_days}-day shutdown.")
 
         elif event == "record_profits":
             bonus = int(ftype["income"] * random.uniform(0.5, 1.5))
@@ -430,21 +464,26 @@ class FactoryMixin:
         elif event == "union_drive":
             if fac.get("unionized") or fac["worker_tier"] == "unionized":
                 return
-            # Show choice: accept → unionized workers; refuse → opinion hit
             self._show_union_drive(fac, ftype, color)
 
         elif event == "inspection":
             if self.transgressions < 30:
                 return
-            fine = int(self.money * random.uniform(0.01, 0.03))
+            fine      = int(self.money * random.uniform(0.01, 0.03))
+            shut_days = random.randint(1, 3) if self.transgressions > 60 else 0
             self.money -= fine
             self.market.money = self.money
+            shut_txt = ""
+            if shut_days:
+                fac["shutdown_days"] = shut_days    # ← factory closed if bad enough
+                shut_txt = f"\nFactory ordered closed for {shut_days} days."
             self.log_event(
-                f"🔍 GOVERNMENT INSPECTION at {ftype['name']}! Fine: -${fine:,.0f}")
+                f"🔍 GOVERNMENT INSPECTION at {ftype['name']}! Fine: -${fine:,.0f}"
+                + (f" | Shutdown {shut_days} days" if shut_days else ""))
             self._show_factory_event(
                 ftype, "#ffaa00", "Government Inspection",
                 f"Regulators have audited your {ftype['name']}.\n\n"
-                f"Fine: -${fine:,.0f}\n\n"
+                f"Fine: -${fine:,.0f}{shut_txt}\n\n"
                 f"(Reduce transgressions to avoid future inspections)")
 
         self.update_status()
