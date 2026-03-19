@@ -392,6 +392,7 @@ class ScreensMixin:
             ("Stock Market", self.open_stock_market),
             ("Assets",       self.open_assets),
             ("World Map",    self.open_world_map),
+            ("🏭 Factory",   self.open_factory_window),
         ]:
             tk.Button(btn_frame, text=text,
                       font=("Arial", 11, "bold"), bg="#1e2130", fg="white",

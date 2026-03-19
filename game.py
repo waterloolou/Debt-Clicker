@@ -20,9 +20,10 @@ from rivals_mixin import RivalsMixin
 from multiplayer_mixin import MultiplayerMixin
 from militia_mixin import MilitiaMixin
 from tutorial_mixin import TutorialMixin
+from factory_mixin import FactoryMixin
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin):
+class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -119,6 +120,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.militia            = 0
         self.blockaded_days     = 0
         self.advisor_cursed_days = 0
+        self.factories          = []
 
     # =========================================================
     # GAME START
@@ -244,6 +246,8 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.process_alliance_tick()
         self.process_wars()
         self.process_militia_effects()
+        self.process_factory_income()
+        self.check_factory_events()
         self.check_epstein_caught()
         self._tick_bm_cooldowns()
         self.check_critical_stats()
