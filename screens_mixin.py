@@ -465,7 +465,7 @@ class ScreensMixin:
 
         self.log = scrolledtext.ScrolledText(frame, height=20, state="disabled",
                                              bg="#0a0d13", fg="#cccccc",
-                                             font=("Consolas", 9), relief="flat",
+                                             font=("Consolas", 10), relief="flat",
                                              insertbackground="white")
         self.log.pack(fill="both", expand=True, padx=10, pady=(4, 10))
 

@@ -28,9 +28,15 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
     def __init__(self, root):
         self.root = root
         self.root.title("Debt Clicker")
-        self.root.geometry("520x700")
+        self.root.geometry("900x720")
+        self.root.minsize(700, 560)
         self.root.configure(bg="#0e1117")
-        self.root.resizable(False, False)
+        self.root.resizable(True, True)
+
+        # F11 toggles fullscreen
+        self._is_fullscreen = False
+        self.root.bind("<F11>", self._toggle_fullscreen)
+        self.root.bind("<Escape>", lambda e: self._exit_fullscreen())
 
         self.username        = ""
         self.country         = ""
@@ -58,6 +64,15 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.screens = {}
         self._build_all_screens()
         self.show_screen("start")
+
+    def _toggle_fullscreen(self, event=None):
+        self._is_fullscreen = not self._is_fullscreen
+        self.root.attributes("-fullscreen", self._is_fullscreen)
+
+    def _exit_fullscreen(self):
+        if self._is_fullscreen:
+            self._is_fullscreen = False
+            self.root.attributes("-fullscreen", False)
 
     def _init_flags(self):
         self.epstein         = False

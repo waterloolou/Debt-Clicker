@@ -147,9 +147,23 @@ class RivalsMixin:
         win = tk.Toplevel(self.root)
         win.title("Rival Action")
         win.configure(bg="#0e1117")
-        win.geometry("380x220")
+        win.geometry("400x240")
         win.resizable(False, False)
-        win.attributes("-topmost", True)
+        win.lift()
+        win.focus_force()
+
+        def _close(event=None):
+            try:
+                win.destroy()
+            except tk.TclError:
+                pass
+
+        win.bind("<Return>", _close)
+        win.bind("<Escape>", _close)
+        win.protocol("WM_DELETE_WINDOW", _close)
+
+        # Auto-dismiss after 12 seconds if not clicked
+        win.after(12000, _close)
 
         tk.Frame(win, bg=color, height=6).pack(fill="x")
         tk.Label(win, text=f"⚠  {title.upper()}",
@@ -158,10 +172,10 @@ class RivalsMixin:
                  font=("Arial", 10, "italic"), bg="#0e1117", fg="#888").pack()
         tk.Label(win, text=body,
                  font=("Arial", 10), bg="#0e1117", fg="white",
-                 wraplength=340, justify="center").pack(pady=12)
-        tk.Button(win, text="Noted", font=("Arial", 10),
-                  bg=color, fg="white", relief="flat", padx=20, pady=4,
-                  command=win.destroy).pack(pady=(0, 14))
+                 wraplength=360, justify="center").pack(pady=10)
+        tk.Button(win, text="Noted  [Enter]", font=("Arial", 10),
+                  bg=color, fg="white", relief="flat", padx=20, pady=5,
+                  command=_close).pack(pady=(0, 14))
         tk.Frame(win, bg=color, height=4).pack(fill="x")
 
     def open_rivals_window(self):
