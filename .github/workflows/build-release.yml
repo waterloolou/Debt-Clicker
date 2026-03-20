@@ -46,7 +46,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build with PyInstaller
-        run: python -m PyInstaller debt_clicker.spec --noconfirm --noupx
+        run: python -m PyInstaller debt_clicker.spec --noconfirm
 
       - name: Compress output (Windows)
         if: runner.os == 'Windows'
