@@ -1,13 +1,13 @@
 import tkinter as tk
 
-# Balanced loan options — daily rates are realistic (not 8%/day which is 10× in 30 days)
+# Short-term loans — high pressure, must be repaid quickly
 LOAN_OPTIONS = [
-    {"label": "Emergency Cash",    "amount":    5_000_000, "rate": 0.008, "days": 14},
-    {"label": "Personal Loan",     "amount":   25_000_000, "rate": 0.006, "days": 30},
-    {"label": "Corporate Bond",    "amount":  100_000_000, "rate": 0.004, "days": 30},
-    {"label": "Hedge Fund Line",   "amount":  300_000_000, "rate": 0.003, "days": 45},
-    {"label": "Sovereign Debt",    "amount":  750_000_000, "rate": 0.002, "days": 60},
-    {"label": "Bailout Package",   "amount": 2_000_000_000,"rate": 0.0015,"days": 90},
+    {"label": "Emergency Cash",    "amount":    5_000_000, "rate": 0.015, "days":  4},
+    {"label": "Personal Loan",     "amount":   25_000_000, "rate": 0.012, "days":  6},
+    {"label": "Corporate Bond",    "amount":  100_000_000, "rate": 0.010, "days":  8},
+    {"label": "Hedge Fund Line",   "amount":  300_000_000, "rate": 0.008, "days": 10},
+    {"label": "Sovereign Debt",    "amount":  750_000_000, "rate": 0.006, "days": 14},
+    {"label": "Bailout Package",   "amount": 2_000_000_000,"rate": 0.005, "days": 20},
 ]
 
 
