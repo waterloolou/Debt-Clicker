@@ -453,6 +453,183 @@ footer a { color: #555; border-bottom: 1px solid #333; }
 footer a:hover { color: #aaa; }
 .footer-disclaimer { font-size: 12px; color: #2a2a2a; margin-top: 20px; }
 
+/* ── Nav Discord ─────────────────────────────────────── */
+.nav-discord {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #aaa !important;
+  font-size: 14px;
+  transition: color 0.2s !important;
+}
+.nav-discord:hover { color: #5865f2 !important; }
+
+/* ── Discord section ─────────────────────────────────── */
+.discord-section {
+  background: var(--bg2);
+  border-top: 1px solid #2a2f3e;
+  border-bottom: 1px solid #2a2f3e;
+  padding: 100px 60px;
+}
+
+.discord-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 80px;
+}
+
+.discord-text { flex: 1; }
+
+.discord-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: #5865f2;
+  margin-bottom: 12px;
+}
+
+.discord-text h2 {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 52px);
+  color: white;
+  margin-bottom: 14px;
+  letter-spacing: 1px;
+}
+.discord-purple { color: #5865f2; }
+
+.discord-text > p {
+  color: #888;
+  font-size: 17px;
+  margin-bottom: 28px;
+}
+
+.discord-perks {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 36px;
+}
+.discord-perks li { color: #aaa; font-size: 15px; }
+
+.btn-discord {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #5865f2;
+  color: white;
+  padding: 14px 28px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 16px;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn-discord:hover { background: #4752c4; transform: translateY(-1px); }
+
+/* ── Discord mock window ─────────────────────────────── */
+.discord-preview { flex: 1; max-width: 420px; }
+
+.dc-window {
+  background: #313338;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+  font-size: 13px;
+}
+
+.dc-titlebar {
+  background: #1e1f22;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dc-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.dc-title { margin-left: 10px; color: #aaa; font-size: 13px; font-weight: 600; }
+
+.dc-body { display: flex; height: 280px; }
+
+.dc-sidebar {
+  width: 140px;
+  background: #2b2d31;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  flex-shrink: 0;
+}
+
+.dc-server-icon {
+  width: 40px; height: 40px;
+  background: #ff2222;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 14px; color: white;
+  margin: 4px auto 12px;
+}
+
+.dc-category {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6d6f78;
+  letter-spacing: 1px;
+  padding: 8px 10px 4px;
+}
+.dc-channel {
+  padding: 4px 10px;
+  color: #6d6f78;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 0 6px;
+}
+.dc-channel.active { background: #404249; color: #dbdee1; }
+.dc-channel:hover { color: #dbdee1; }
+
+.dc-chat {
+  flex: 1;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.dc-msg { display: flex; gap: 10px; align-items: flex-start; }
+
+.dc-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: #5865f2;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px; color: white;
+  flex-shrink: 0;
+}
+
+.dc-msg-body { flex: 1; }
+.dc-name { font-weight: 700; font-size: 13px; margin-right: 6px; }
+.dc-badge {
+  background: #ff2222;
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.dc-msg-body p { color: #dbdee1; font-size: 13px; margin-top: 2px; line-height: 1.4; }
+
+/* ── Download extra links ────────────────────────────── */
+.dl-extra-links {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 8px;
+}
+
 /* ── Responsive ──────────────────────────────────────── */
 @media (max-width: 900px) {
   .hero { flex-direction: column; padding: 60px 24px; text-align: center; }
@@ -464,6 +641,9 @@ footer a:hover { color: #aaa; }
   .stat { padding: 24px 28px; }
   .stat-num { font-size: 32px; }
   footer { padding: 40px 24px; }
+  .discord-section { padding: 60px 24px; }
+  .discord-inner { flex-direction: column; gap: 40px; }
+  .discord-preview { max-width: 100%; width: 100%; }
 }
 
 @media (max-width: 560px) {
