@@ -59,3 +59,26 @@ const ticker = document.querySelector('.ticker-inner');
 if (ticker) {
   ticker.innerHTML += ticker.innerHTML;
 }
+
+// ── Live download count from GitHub API ───────────────
+const dlEl = document.getElementById('dl-count');
+if (dlEl) {
+  fetch('https://api.github.com/repos/waterloolou/Debt-Clicker/releases')
+    .then(r => r.json())
+    .then(data => {
+      const total = data.reduce((sum, release) =>
+        sum + (release.assets || []).reduce((s, a) => s + a.download_count, 0), 0);
+      // Animate count up
+      const target = total;
+      const duration = 1200;
+      const start = performance.now();
+      function countUp(now) {
+        const t = Math.min((now - start) / duration, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+        dlEl.textContent = Math.round(ease * target).toLocaleString();
+        if (t < 1) requestAnimationFrame(countUp);
+      }
+      requestAnimationFrame(countUp);
+    })
+    .catch(() => { dlEl.textContent = '—'; });
+}
