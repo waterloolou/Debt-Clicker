@@ -136,7 +136,7 @@ class CasinoMixin:
                  font=("Impact", 22), bg="#0e1117", fg="#ff2222").pack(pady=(18, 4))
         tk.Label(win, text="1 bullet. 6 chambers. Are you feeling lucky?",
                  font=("Arial", 9), bg="#0e1117", fg="#888").pack(pady=(0, 2))
-        tk.Label(win, text="Max bet: 25% of balance  ($50M cap)",
+        tk.Label(win, text="Max bet: your entire balance. You could lose everything.",
                  font=("Arial", 8), bg="#0e1117", fg="#555").pack(pady=(0, 10))
 
         canvas = tk.Canvas(win, width=220, height=220, bg="#0e1117", highlightthickness=0)
@@ -252,12 +252,6 @@ class CasinoMixin:
             bet = float(self._rr_bet_var.get().replace(",", ""))
         except ValueError:
             self._rr_result.config(text="Invalid bet.", fg="#ff4444")
-            return
-        max_bet = min(50_000_000, self.money * 0.25)
-        if bet > max_bet:
-            self._rr_result.config(
-                text=f"Max bet: ${max_bet:,.0f}  (25% of balance, $50M cap)",
-                fg="#ff4444")
             return
         if bet > self.money:
             self._rr_result.config(text="Not enough money.", fg="#ff4444")
@@ -411,10 +405,6 @@ class CasinoMixin:
             bet = float(self._slot_bet_var.get().replace(",", ""))
         except ValueError:
             self._slot_result.config(text="Invalid bet.", fg="#ff4444")
-            return
-        max_bet = min(30_000_000, self.money * 0.20)
-        if bet > max_bet:
-            self._slot_result.config(text=f"Max bet: ${max_bet:,.0f} (20% of balance)", fg="#ff4444")
             return
         if bet > self.money:
             self._slot_result.config(text="Not enough money.", fg="#ff4444")
@@ -597,10 +587,6 @@ class CasinoMixin:
             return
         if bet <= 0:
             self._poker_result.config(text="Bet must be > 0.", fg="#ff4444")
-            return
-        max_bet = min(30_000_000, self.money * 0.20)
-        if bet > max_bet:
-            self._poker_result.config(text=f"Max bet: ${max_bet:,.0f} (20% of balance)", fg="#ff4444")
             return
         if bet > self.money:
             self._poker_result.config(text="Not enough money.", fg="#ff4444")

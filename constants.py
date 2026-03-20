@@ -2,6 +2,10 @@ import os
 
 LEADERBOARD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "leaderboard.json")
 
+# Global leaderboard — points at the multiplayer server's HTTP endpoint.
+# Change this to your hosted server address once deployed.
+GLOBAL_LB_URL = "http://localhost:5556/leaderboard"
+
 # -----------------------------
 # STOCK CATEGORIES
 # -----------------------------

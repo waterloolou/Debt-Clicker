@@ -21,9 +21,10 @@ from multiplayer_mixin import MultiplayerMixin
 from militia_mixin import MilitiaMixin
 from tutorial_mixin import TutorialMixin
 from factory_mixin import FactoryMixin
+from save_mixin import SaveMixin
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin):
+class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):

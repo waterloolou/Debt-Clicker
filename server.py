@@ -3,6 +3,10 @@ Debt Clicker — Multiplayer Server
 Usage: python server.py [port]
 Default port: 5555
 Max players per lobby: 3
+
+Also runs an HTTP server on port+1 (default 5556) for the global leaderboard:
+  GET  /leaderboard        → JSON array of top-50 entries
+  POST /leaderboard        → submit {"name": ..., "days": ..., "country": ...}
 """
 
 import socket
@@ -11,14 +15,110 @@ import json
 import sys
 import random
 import string
+import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
-MAX_PLAYERS = 3
+MAX_PLAYERS  = 3
 DEFAULT_PORT = 5555
 
 # lobby_id -> {"players": [{"name": ..., "conn": ..., "addr": ...}]}
-lobbies = {}
+lobbies      = {}
 lobbies_lock = threading.Lock()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Global leaderboard (in-memory + persisted to leaderboard_global.json)
+# ──────────────────────────────────────────────────────────────────────────────
+
+GLOBAL_LB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "leaderboard_global.json")
+global_lb      = []
+global_lb_lock = threading.Lock()
+
+
+def _load_global_lb():
+    global global_lb
+    try:
+        with open(GLOBAL_LB_FILE) as f:
+            global_lb = json.load(f)
+    except Exception:
+        global_lb = []
+
+
+def _save_global_lb():
+    try:
+        with open(GLOBAL_LB_FILE, "w") as f:
+            json.dump(global_lb, f, indent=2)
+    except Exception:
+        pass
+
+
+def add_global_score(name: str, days: int, country: str):
+    with global_lb_lock:
+        global_lb.append({"name": name, "days": days, "country": country})
+        global_lb.sort(key=lambda x: x["days"], reverse=True)
+        del global_lb[50:]          # keep top 50
+        _save_global_lb()
+
+
+def get_global_lb():
+    with global_lb_lock:
+        return list(global_lb)
+
+
+class _LBHandler(BaseHTTPRequestHandler):
+    def log_message(self, *_):
+        pass   # silence HTTP access log
+
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.end_headers()
+
+    def do_GET(self):
+        if self.path == "/leaderboard":
+            data = json.dumps(get_global_lb()).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._cors()
+            self.end_headers()
+            self.wfile.write(data)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_POST(self):
+        if self.path == "/leaderboard":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                entry = json.loads(body)
+                name    = str(entry.get("name", "")).strip()[:32]
+                days    = int(entry.get("days", 0))
+                country = str(entry.get("country", "")).strip()[:64]
+                if name and days > 0:
+                    add_global_score(name, days, country)
+            except Exception:
+                pass
+            self.send_response(200)
+            self._cors()
+            self.end_headers()
+            self.wfile.write(b"ok")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+
+def _run_http(http_port: int):
+    _load_global_lb()
+    server = HTTPServer(("0.0.0.0", http_port), _LBHandler)
+    print(f"Global leaderboard HTTP on port {http_port}  (GET/POST /leaderboard)")
+    server.serve_forever()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -255,6 +355,10 @@ def main():
             port = int(sys.argv[1])
         except ValueError:
             print(f"Invalid port '{sys.argv[1]}', using {DEFAULT_PORT}")
+
+    # Start HTTP leaderboard server on port+1
+    http_port = port + 1
+    threading.Thread(target=_run_http, args=(http_port,), daemon=True).start()
 
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

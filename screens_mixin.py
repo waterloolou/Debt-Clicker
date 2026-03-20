@@ -3,7 +3,7 @@ from tkinter import scrolledtext, ttk
 import json
 import random
 
-from constants import LEADERBOARD_FILE, STOCK_CATEGORIES, CATEGORY_PRICE_RANGES
+from constants import LEADERBOARD_FILE, GLOBAL_LB_URL, STOCK_CATEGORIES, CATEGORY_PRICE_RANGES
 
 PLAYABLE_COUNTRIES = sorted([
     # Superpowers
@@ -104,6 +104,12 @@ class ScreensMixin:
 
         bottom_row = tk.Frame(frame, bg="#0e1117")
         bottom_row.pack(pady=(0, 0))
+
+        tk.Button(bottom_row, text="Load Game",
+                  font=("Arial", 10), bg="#1e4060", fg="#4499ff",
+                  activebackground="#2e5070", relief="flat",
+                  padx=20, pady=5,
+                  command=self.open_load_menu).pack(side="left", padx=8)
 
         tk.Button(bottom_row, text="Leaderboard",
                   font=("Arial", 10), bg="#1e2130", fg="#aaaaaa",
@@ -413,6 +419,7 @@ class ScreensMixin:
             ("Alliance",     self.open_alliance_window),
             ("💬 Chat",      self.open_chat_window),
             ("⚔️ War Room",  self.open_war_room),
+            ("💾 Save",      self.open_save_menu),
         ]:
             tk.Button(btn_frame2, text=text,
                       font=("Arial", 10), bg="#151820", fg="#aaaaaa",
@@ -572,9 +579,33 @@ class ScreensMixin:
 
         return frame
 
+    def _submit_global_score(self):
+        """Non-blocking POST to the multiplayer server's leaderboard endpoint."""
+        import threading, urllib.request
+        from constants import GLOBAL_LB_URL
+        def _post():
+            try:
+                import json as _json
+                payload = _json.dumps({
+                    "name":    self.username,
+                    "days":    self.days,
+                    "country": getattr(self, "country", ""),
+                }).encode()
+                req = urllib.request.Request(
+                    GLOBAL_LB_URL,
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                urllib.request.urlopen(req, timeout=4)
+            except Exception:
+                pass   # server offline — silent fail
+        threading.Thread(target=_post, daemon=True).start()
+
     def _show_end_screen(self):
         self._save_legacy()
         rank, total = self._save_score()
+        self._submit_global_score()
 
         cause = getattr(self, "death_cause", "broke")
         title, flavor, color, icon = self._END_THEMES.get(cause, self._END_THEMES["broke"])
@@ -647,48 +678,92 @@ class ScreensMixin:
         frame = tk.Frame(self.root, bg="#0e1117")
 
         tk.Label(frame, text="LEADERBOARD",
-                 font=("Impact", 36), bg="#0e1117", fg="#ff2222").pack(pady=(50, 30))
+                 font=("Impact", 36), bg="#0e1117", fg="#ff2222").pack(pady=(40, 6))
+
+        # Tab bar
+        tab_bar = tk.Frame(frame, bg="#0e1117")
+        tab_bar.pack()
+        self._lb_tab = tk.StringVar(value="local")
+
+        def _switch(tab):
+            self._lb_tab.set(tab)
+            if tab == "local":
+                local_btn.config(bg="#ff2222", fg="white")
+                global_btn.config(bg="#1e2130", fg="#aaa")
+                self._populate_leaderboard()
+            else:
+                local_btn.config(bg="#1e2130", fg="#aaa")
+                global_btn.config(bg="#4499ff", fg="white")
+                self._populate_global_leaderboard()
+
+        local_btn = tk.Button(tab_bar, text="Local", font=("Arial", 11, "bold"),
+                              bg="#ff2222", fg="white", relief="flat", padx=24, pady=6,
+                              command=lambda: _switch("local"))
+        local_btn.pack(side="left", padx=4)
+
+        global_btn = tk.Button(tab_bar, text="Global", font=("Arial", 11, "bold"),
+                               bg="#1e2130", fg="#aaa", relief="flat", padx=24, pady=6,
+                               command=lambda: _switch("global"))
+        global_btn.pack(side="left", padx=4)
 
         self.lb_frame = tk.Frame(frame, bg="#0e1117")
-        self.lb_frame.pack(fill="both", expand=True, padx=40)
+        self.lb_frame.pack(fill="both", expand=True, padx=40, pady=(12, 0))
 
         tk.Button(frame, text="Back",
                   font=("Arial", 11), bg="#1e2130", fg="white",
                   activebackground="#2e3140", relief="flat",
                   padx=20, pady=6,
-                  command=lambda: self.show_screen("start")).pack(pady=20)
+                  command=lambda: self.show_screen("start")).pack(pady=16)
 
         return frame
 
-    def _populate_leaderboard(self):
+    def _render_lb_entries(self, entries, show_country=False):
         for w in self.lb_frame.winfo_children():
             w.destroy()
-
-        entries = self._load_leaderboard()
-
         if not entries:
             tk.Label(self.lb_frame, text="No scores yet. Be the first!",
                      font=("Arial", 12), bg="#0e1117", fg="#aaaaaa").pack(pady=20)
             return
-
         medals = ["🥇", "🥈", "🥉"]
-
         for i, entry in enumerate(entries[:10]):
             row = tk.Frame(self.lb_frame, bg="#1e2130")
             row.pack(fill="x", pady=3, ipady=6)
-
             rank_text = medals[i] if i < 3 else f"#{i+1}"
-            tk.Label(row, text=rank_text,
-                     font=("Arial", 13), bg="#1e2130", fg="#ffdd44",
-                     width=4).pack(side="left", padx=10)
-
-            tk.Label(row, text=entry["name"],
-                     font=("Arial", 12), bg="#1e2130", fg="white",
-                     width=20, anchor="w").pack(side="left")
-
+            tk.Label(row, text=rank_text, font=("Arial", 13), bg="#1e2130",
+                     fg="#ffdd44", width=4).pack(side="left", padx=10)
+            name_text = entry["name"]
+            if show_country and entry.get("country"):
+                name_text += f"  ({entry['country']})"
+            tk.Label(row, text=name_text, font=("Arial", 12), bg="#1e2130",
+                     fg="white", width=28, anchor="w").pack(side="left")
             tk.Label(row, text=f"{entry['days']} days",
                      font=("Arial", 12, "bold"), bg="#1e2130",
                      fg="#00ff90").pack(side="right", padx=16)
+
+    def _populate_leaderboard(self):
+        entries = self._load_leaderboard()
+        self._render_lb_entries(entries, show_country=False)
+
+    def _populate_global_leaderboard(self):
+        import threading, urllib.request
+        for w in self.lb_frame.winfo_children():
+            w.destroy()
+        status = tk.Label(self.lb_frame, text="Fetching global scores…",
+                          font=("Arial", 11), bg="#0e1117", fg="#aaaaaa")
+        status.pack(pady=20)
+
+        def _fetch():
+            try:
+                with urllib.request.urlopen(GLOBAL_LB_URL, timeout=4) as r:
+                    import json as _json
+                    data = _json.loads(r.read())
+                self.root.after(0, lambda: self._render_lb_entries(data, show_country=True))
+            except Exception:
+                self.root.after(0, lambda: [
+                    status.config(text="Server offline — global leaderboard unavailable.",
+                                  fg="#ff4444")
+                ])
+        threading.Thread(target=_fetch, daemon=True).start()
 
     # =========================================================
     # LEADERBOARD PERSISTENCE
