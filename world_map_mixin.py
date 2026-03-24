@@ -157,6 +157,18 @@ CLR_COUP     = "#1a0a2e"
 CLR_COUP_E   = "#aa44ff"
 CLR_HOME     = "#003366"
 CLR_HOME_E   = "#0066cc"
+CLR_ALLY     = "#002a1a"
+CLR_ALLY_E   = "#00cc66"
+
+# Crash multipliers applied to resource market category on seizure
+RESOURCE_CRASH = {
+    "Oil":         (["Energy"],                  0.88, 4),
+    "Diamonds":    (["Finance", "Entertainment"], 0.90, 3),
+    "Minerals":    (["Automotive", "Technology"], 0.87, 4),
+    "Agriculture": (["Retail"],                  0.89, 3),
+    "Technology":  (["Technology", "AI"],         0.86, 5),
+    "Finance":     (["Finance"],                  0.85, 5),
+}
 
 
 def _load_world():
@@ -250,6 +262,13 @@ class WorldMapMixin:
             win.protocol("WM_DELETE_WINDOW",
                          lambda: [plt.close(fig), win.destroy()])
 
+            def _on_map_resize(e, _fig=fig, _canvas=canvas):
+                new_w = max(1, e.width  - 16)
+                new_h = max(1, e.height - 80)
+                _fig.set_size_inches(new_w / 96, new_h / 96, forward=True)
+                _canvas.draw_idle()
+            win.bind("<Configure>", _on_map_resize)
+
         threading.Thread(target=_build, daemon=True).start()
 
     # =========================================================
@@ -261,11 +280,13 @@ class WorldMapMixin:
         for w in leg.winfo_children():
             w.destroy()
         res_clr = RESOURCE_DATA[resource]["clr"][0]
+        ally_label = f"Ally ({self.alliance})" if self.alliance else "Ally"
         for color, label in [
             (res_clr,    f"{resource} reserves"),
             (CLR_BOMBED, "Bombed"),
             (CLR_COUP,   "Coup'd"),
             (CLR_HOME,   "Your country"),
+            (CLR_ALLY,   ally_label),
             (CLR_LAND,   "No resource"),
         ]:
             dot = tk.Canvas(leg, width=12, height=12, bg=CLR_OCEAN, highlightthickness=0)
@@ -303,22 +324,36 @@ class WorldMapMixin:
         coup_names   = {c for c in self.bombed_countries
                         if action_taken.get(c) == "Stage a Coup"}
 
+        # Ally countries (cannot be attacked)
+        ally_countries = set()
+        if self.alliance:
+            ally_countries = self._ALLIANCE_DATA.get(self.alliance, {}).get("countries", set())
+
         home_mask     = world["NAME"] == home
         occupied_mask = world["NAME"].isin(self.bombed_countries)
-        res_mask      = world["NAME"].isin(res_ctrs) & ~occupied_mask & ~home_mask
-        other_mask    = ~world["NAME"].isin(res_ctrs) & ~occupied_mask & ~home_mask
+        ally_mask     = world["NAME"].isin(ally_countries) & ~home_mask & ~occupied_mask
+        res_mask      = world["NAME"].isin(res_ctrs) & ~occupied_mask & ~home_mask & ~ally_mask
+        other_mask    = ~world["NAME"].isin(res_ctrs) & ~occupied_mask & ~home_mask & ~ally_mask
         bombed_mask   = world["NAME"].isin(bombed_names)
         coup_mask     = world["NAME"].isin(coup_names)
 
         for df, clr, edge, lw in [
             (world[other_mask],  CLR_LAND,   CLR_EDGE,    0.35),
             (world[res_mask],    fill_clr,   edge_clr,    0.7),
+            (world[ally_mask],   CLR_ALLY,   CLR_ALLY_E,  0.9),
             (world[bombed_mask], CLR_BOMBED, CLR_BOMBED_E, 0.8),
             (world[coup_mask],   CLR_COUP,   CLR_COUP_E,  0.8),
             (world[home_mask],   CLR_HOME,   CLR_HOME_E,  1.0),
         ]:
             if not df.empty:
                 df.plot(ax=ax, color=clr, edgecolor=edge, linewidth=lw, aspect=None)
+
+        # Label allied countries
+        for _, row in world[ally_mask].iterrows():
+            cx, cy = row.geometry.centroid.x, row.geometry.centroid.y
+            ax.text(cx, cy - 2.5, row["NAME"] + " (ALLY)", color=CLR_ALLY_E, fontsize=4.5,
+                    ha="center", va="top", zorder=6,
+                    path_effects=[pe.withStroke(linewidth=1.5, foreground=CLR_OCEAN)])
 
         for _, row in world[res_mask].iterrows():
             cx, cy = row.geometry.centroid.x, row.geometry.centroid.y
@@ -436,6 +471,19 @@ class WorldMapMixin:
                  font=("Arial", 14, "bold"), bg="#0e1117", fg="#ffaa00").pack(pady=(16, 2))
         tk.Label(popup, text=f"{resource} — {info['reserves']}",
                  font=("Arial", 9, "italic"), bg="#0e1117", fg="#666").pack()
+
+        # Block attacking allied countries
+        if self.alliance:
+            ally_countries = self._ALLIANCE_DATA.get(self.alliance, {}).get("countries", set())
+            if name in ally_countries:
+                tk.Label(popup,
+                         text=f"🤝 {name} is a member of your {self.alliance} alliance.\nYou cannot attack an ally.",
+                         font=("Arial", 10, "bold"), bg="#0e1117", fg=CLR_ALLY_E,
+                         justify="center").pack(pady=16)
+                tk.Button(popup, text="Close", bg="#1e2130", fg="white",
+                          relief="flat", padx=20, pady=6,
+                          command=popup.destroy).pack(pady=4)
+                return
 
         # Check if rival controls this country
         rival = self.is_rival_controlled(resource, name)
@@ -558,9 +606,14 @@ class WorldMapMixin:
                 self.root.after(1500, lambda rn=rival_name, rv=rival:
                                 self._rival_retaliate(rn, rv, name, resource))
 
-        mkt_mult = 1.06 if action_name == "Bomb" else 1.04
-        for cat in RESOURCE_DATA[resource]["market"]:
-            self.apply_market_effect([cat], mkt_mult, 4, f"{action_name}: {name}")
+        # Crash the seized resource's market category (supply disruption)
+        if resource in RESOURCE_CRASH:
+            crash_cats, crash_mult, crash_days = RESOURCE_CRASH[resource]
+            self.apply_market_effect(crash_cats, crash_mult, crash_days,
+                                     f"Resource seizure: {name} {resource}")
+            self.log_event(
+                f"📉 {resource} seizure in {name} caused a market crash in "
+                f"{', '.join(crash_cats)} stocks for {crash_days} days.")
         if action_name == "Bomb":
             self.apply_market_effect(["Defense"], 1.04, 3, f"Military op: {name}")
 

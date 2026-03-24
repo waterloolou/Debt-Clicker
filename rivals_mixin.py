@@ -45,8 +45,13 @@ class RivalsMixin:
                         self.log_event(f"RIVAL: {name} seized {resource} ops in {target}!")
                         self._add_ticker(f"MARKETS: {name} acquires {resource} stake in {target}...")
 
-            # Direct attack on the player (8% chance per day)
-            if random.random() < 0.08:
+            # Tick retaliation boost counter
+            if getattr(self, "rival_retaliation_boost", 0) > 0:
+                self.rival_retaliation_boost -= 1
+
+            # Direct attack on the player (8% base, doubled during retaliation boost)
+            base_chance = 0.16 if getattr(self, "rival_retaliation_boost", 0) > 0 else 0.08
+            if random.random() < base_chance:
                 self._rival_attack_player(name, rival)
 
             # Random release (slower — rivals hold territory longer)
@@ -57,7 +62,13 @@ class RivalsMixin:
     def _rival_attack_player(self, name, rival):
         """A rival launches a targeted action against the player."""
         color  = rival.get("color", "#cc44ff")
-        attack = random.choice(["smear", "lobby", "sabotage", "poach", "lawsuit"])
+        # Build available attack pool based on what player owns
+        pool = ["smear", "lobby", "sabotage", "poach", "lawsuit"]
+        if self.factories:
+            pool.extend(["asset_strike", "smear_factories"])
+        if self.oil_operations:
+            pool.append("operation_seizure")
+        attack = random.choice(pool)
 
         # Alliance may intercept the attack
         block_chance = self.get_alliance_block_chance(attack)
@@ -139,6 +150,42 @@ class RivalsMixin:
                 "Lawsuit Filed",
                 f"{name}'s legal team has filed a federal lawsuit against you.\n\n"
                 f"-${fine:,}  |  Transgressions +{trans}")
+
+        elif attack == "asset_strike" and self.factories:
+            fac = random.choice(self.factories)
+            from factory_mixin import _FACTORY_BY_ID
+            ftype = _FACTORY_BY_ID[fac["type_id"]]
+            fac["on_strike"]   = True
+            fac["strike_days"] = 3
+            self.public_opinion = max(0, self.public_opinion - 8)
+            self.log_event(f"RIVAL: {name} bribed your workers at {ftype['name']}! "
+                           f"3-day strike. Opinion -8.")
+            self._show_rival_attack_popup(name, color,
+                "Factory Strike Instigated",
+                f"{name} paid agitators to organise a strike at your {ftype['name']}.\n\n"
+                f"3-day work stoppage  |  Public Opinion -8")
+
+        elif attack == "operation_seizure" and self.oil_operations:
+            op = random.choice(self.oil_operations)
+            self.oil_operations.remove(op)
+            self.bombed_countries.discard(op["country"])
+            getattr(self, "action_taken", {}).pop(op["country"], None)
+            self.log_event(f"RIVAL: {name} seized your {op['resource']} operation "
+                           f"in {op['country']}! Operation lost.")
+            self._show_rival_attack_popup(name, color,
+                "Operation Seized",
+                f"{name} deployed operatives and seized control of your\n"
+                f"{op['resource']} operations in {op['country']}.\n\nOperation lost.")
+
+        elif attack == "smear_factories" and self.factories:
+            hit = random.randint(10, 20)
+            self.public_opinion = max(0, self.public_opinion - hit)
+            self.log_event(f"RIVAL: {name} ran a labour-violation campaign against your factories! "
+                           f"Opinion -{hit}")
+            self._show_rival_attack_popup(name, color,
+                "Labour Smear Campaign",
+                f"{name} leaked footage linking your factories to labour violations.\n\n"
+                f"Public Opinion -{hit}")
 
         self.update_status()
 

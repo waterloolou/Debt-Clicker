@@ -35,7 +35,7 @@ class EventsMixin:
             self.apply_market_effect(["Finance"], 0.91, 2, "Tax fraud scandal")
             self.add_transgression(10, 8)
 
-        elif r == 3 and self.company:
+        elif r == 3 and self.company and self.factories:
             self.money -= 50000
             self.show_event("Factory Incident!", "One of your child workers at your illegal factory got mutilated by machinery. Pay $50,000 to cover it up.")
             self.apply_market_effect(["Retail", "Automotive"], 0.94, 2, "Factory scandal")
@@ -88,17 +88,23 @@ class EventsMixin:
             self.show_revolution_event()
             return
 
-        elif r == 13 and self.company:
+        elif r == 13 and self.company and self.factories:
             self.company = False
             self.money -= 1000000
             self.show_event("Factory Shutdown!", "All your foreign investments in underage factory workers are exposed. Workers freed — you pay $1,000,000 in damages.")
             self.apply_market_effect(["Retail", "Automotive"], 0.92, 3, "Factory shutdown")
             self.add_transgression(10, 12)
 
-        elif r == 14 and self.mansion:
-            if "island" in self.owned_assets or self.owned_islands:
-                self.show_event("Cuba Tries to Invade!", "Cuba eyed your island — but your sovereign territory kept them out. Your Private Island paid off.")
-            else:
+        elif r == 14:
+            if self.owned_islands:
+                # Seize a random island — actual consequence
+                seized = random.choice(list(self.owned_islands))
+                self.owned_islands.discard(seized)
+                self.public_opinion = max(0, self.public_opinion - 10)
+                self.show_event("Island Seized!", f"The government of the host nation has seized your island '{seized}'. "
+                                f"Your ownership rights were disputed in international court — and you lost.\n\nPublic Opinion −10.")
+                self.apply_market_effect(["Finance"], 0.94, 2, "Asset seizure news")
+            elif self.mansion:
                 self.mansion = False
                 self.show_event("Cuba Invades!", "The island your private mansion sits on was just invaded by Cuba. You lost your mansion.")
                 self.apply_market_effect(["Defense"], 1.06, 3, "Geopolitical tension")
@@ -149,7 +155,7 @@ class EventsMixin:
             self.apply_market_effect(["Finance"], 0.90, 4, "Ponzi scheme collapse")
             self.add_transgression(15, 15)
 
-        elif r == 21 and not self.oil_spill:
+        elif r == 21 and not self.oil_spill and any(op.get("resource") == "Oil" for op in self.oil_operations):
             self.oil_spill = True
             self.money -= 50000000
             self.show_event("Oil Spill!", "Your private tanker had a 'minor' accident off the coast. The ocean is now 40% oil. Pay $50,000,000 in cleanup costs.")
@@ -199,7 +205,7 @@ class EventsMixin:
                 self.apply_market_effect(["Defense"], 0.93, 2, "Criminal investigation")
             self.add_transgression(15, 10)
 
-        elif r == 28:
+        elif r == 28 and self.casino_visited:
             self.money -= 20000000
             self.show_event("Casino Money Laundering!", "You used a casino to launder money. Casinos report large cash transactions. The IRS called. Lose $20,000,000.")
             self.apply_market_effect(["Finance", "Entertainment"], 0.91, 3, "Money laundering probe")

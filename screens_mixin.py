@@ -373,14 +373,14 @@ class ScreensMixin:
         top.pack(fill="x", padx=20, pady=(16, 6))
 
         self.money_label = tk.Label(top, text="Money: $100,000,000",
-                                    font=("Arial", 22, "bold"), bg="#0e1117", fg="#00ff90")
+                                    font=self._font_money, bg="#0e1117", fg="#00ff90")
         self.money_label.pack(side="left")
 
         right_top = tk.Frame(top, bg="#0e1117")
         right_top.pack(side="right")
 
         self.day_label = tk.Label(right_top, text="Day 0",
-                                  font=("Arial", 14), bg="#0e1117", fg="#aaaaaa")
+                                  font=self._font_day, bg="#0e1117", fg="#aaaaaa")
         self.day_label.pack(side="right", padx=(8, 0))
 
         self.clock_canvas = tk.Canvas(right_top, width=52, height=52,
@@ -401,7 +401,7 @@ class ScreensMixin:
             ("🏭 Factory",   self.open_factory_window),
         ]:
             tk.Button(btn_frame, text=text,
-                      font=("Arial", 11, "bold"), bg="#1e2130", fg="white",
+                      font=self._font_btn_pri, bg="#1e2130", fg="white",
                       activebackground="#2e3140", relief="flat",
                       padx=18, pady=7,
                       command=cmd).pack(side="left", padx=6)
@@ -422,7 +422,7 @@ class ScreensMixin:
             ("💾 Save",      self.open_save_menu),
         ]:
             tk.Button(btn_frame2, text=text,
-                      font=("Arial", 10), bg="#151820", fg="#aaaaaa",
+                      font=self._font_btn_sec, bg="#151820", fg="#aaaaaa",
                       activebackground="#2e3140", relief="flat",
                       padx=12, pady=5,
                       command=cmd).pack(side="left", padx=4)
@@ -437,10 +437,10 @@ class ScreensMixin:
 
             hdr = tk.Frame(col, bg="#0e1117")
             hdr.pack(fill="x")
-            tk.Label(hdr, text=label, font=("Arial", 9),
+            tk.Label(hdr, text=label, font=self._font_stat,
                      bg="#0e1117", fg="#888").pack(side="left")
             val_lbl = tk.Label(hdr, text=str(init_val),
-                               font=("Arial", 9, "bold"), bg="#0e1117", fg=color)
+                               font=self._font_stat, bg="#0e1117", fg=color)
             val_lbl.pack(side="right")
 
             track = tk.Frame(col, bg="#1a1a2e", height=14)
@@ -469,7 +469,7 @@ class ScreensMixin:
         ticker_frame.pack(fill="x", pady=(2, 0))
         ticker_frame.pack_propagate(False)
         self._ticker_label = tk.Label(ticker_frame, text="",
-                                      font=("Consolas", 10), bg="#1a1a0a", fg="#ffaa00",
+                                      font=self._font_ticker, bg="#1a1a0a", fg="#ffaa00",
                                       anchor="center")
         self._ticker_label.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._ticker_text = "  DEBT CLICKER NEWS  |  Your empire begins its descent...  "
@@ -480,7 +480,7 @@ class ScreensMixin:
         # ── Event log ──────────────────────────────────────────
         self.log = scrolledtext.ScrolledText(frame, height=20, state="disabled",
                                              bg="#0a0d13", fg="#cccccc",
-                                             font=("Consolas", 10), relief="flat",
+                                             font=self._font_log, relief="flat",
                                              insertbackground="white")
         self.log.pack(fill="both", expand=True, padx=10, pady=(4, 10))
 

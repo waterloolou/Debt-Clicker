@@ -89,14 +89,15 @@ class CasinoMixin:
     # =========================================================
 
     def open_casino(self):
+        self.casino_visited = True
         win = tk.Toplevel(self.root)
         win.title("Casino")
         win.configure(bg="#0e1117")
-        win.geometry("500x300")
+        win.geometry("560x420")
         win.resizable(False, False)
 
         tk.Label(win, text="🎰  CASINO  🎰",
-                 font=("Impact", 28), bg="#0e1117", fg="#ffdd44").pack(pady=(24, 18))
+                 font=("Impact", 28), bg="#0e1117", fg="#ffdd44").pack(pady=(18, 10))
 
         cards_frame = tk.Frame(win, bg="#0e1117")
         cards_frame.pack()
@@ -120,6 +121,42 @@ class CasinoMixin:
                       bg="#ff2222", fg="white", relief="flat",
                       padx=16, pady=4,
                       command=lambda c=cmd, w=win: [w.destroy(), c()]).pack(pady=(10, 0))
+
+        # Work section
+        tk.Frame(win, bg="#333", height=1).pack(fill="x", padx=20, pady=(16, 8))
+
+        WORK_TIERS = [
+            (0, "Worker",    (1_000, 50_000),         None),
+            (1, "Executive", (50_000_000, 200_000_000),    1_000_000_000),
+            (2, "Mogul",     (500_000_000, 2_000_000_000), 500_000_000_000),
+            (3, "Oligarch",  (5_000_000_000, 20_000_000_000), 1_000_000_000_000),
+        ]
+        lvl = self.work_level
+        tier = WORK_TIERS[lvl]
+        next_tier = WORK_TIERS[lvl + 1] if lvl < 3 else None
+
+        work_row = tk.Frame(win, bg="#0e1117")
+        work_row.pack(pady=4)
+
+        tk.Label(work_row,
+                 text=f"💼  Work  [{tier[1]}]  —  ${tier[2][0]:,.0f}–${tier[2][1]:,.0f} per click",
+                 font=("Arial", 10), bg="#0e1117", fg="#aaaaaa").pack(side="left", padx=(0, 12))
+        tk.Button(work_row, text="Work", font=("Arial", 10, "bold"),
+                  bg="#00bb44", fg="white", relief="flat", padx=14, pady=5,
+                  command=lambda w=win: [self.work(), w.destroy(), self.open_casino()]).pack(side="left")
+
+        if next_tier:
+            upgrade_row = tk.Frame(win, bg="#0e1117")
+            upgrade_row.pack(pady=4)
+            can_afford = self.money >= next_tier[3]
+            tk.Button(upgrade_row,
+                      text=f"⬆ Upgrade to {next_tier[1]} — ${next_tier[3]:,.0f}",
+                      font=("Arial", 9, "bold"),
+                      bg="#886600" if can_afford else "#2a2a2a",
+                      fg="white" if can_afford else "#555",
+                      relief="flat", padx=12, pady=4,
+                      state="normal" if can_afford else "disabled",
+                      command=lambda w=win: self._buy_work_upgrade(w)).pack()
 
     # =========================================================
     # RUSSIAN ROULETTE
@@ -738,8 +775,33 @@ class CasinoMixin:
     # =========================================================
 
     def work(self):
-        gain = random.randint(1000, 50000)
+        _ranges = [
+            (1_000, 50_000),
+            (50_000_000, 200_000_000),
+            (500_000_000, 2_000_000_000),
+            (5_000_000_000, 20_000_000_000),
+        ]
+        lo, hi = _ranges[min(self.work_level, 3)]
+        gain = random.randint(lo, hi)
         self.money += gain
         self.market.money = self.money
         self.log_event(f"You worked and earned ${gain:,}")
         self.update_status()
+
+    def _buy_work_upgrade(self, win):
+        _costs = [None, 1_000_000_000, 500_000_000_000, 1_000_000_000_000]
+        _names = ["Worker", "Executive", "Mogul", "Oligarch"]
+        next_lvl = self.work_level + 1
+        if next_lvl > 3:
+            return
+        cost = _costs[next_lvl]
+        if self.money < cost:
+            self.log_event(f"Can't afford Work Upgrade to {_names[next_lvl]} (${cost:,})")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        self.work_level = next_lvl
+        self.log_event(f"💼 Work upgraded to {_names[next_lvl]}! New earnings range unlocked.")
+        self.update_status()
+        win.destroy()
+        self.open_casino()

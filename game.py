@@ -1,4 +1,5 @@
 import tkinter as tk
+import tkinter.font as tkfont
 import random
 import threading
 import math
@@ -38,6 +39,18 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         # F11 toggles fullscreen
         self._is_fullscreen = False
         self.root.bind("<F11>", self._toggle_fullscreen)
+
+        # Dynamic font objects — updated on window resize
+        self._font_money   = tkfont.Font(family="Arial", size=22, weight="bold")
+        self._font_day     = tkfont.Font(family="Arial", size=14)
+        self._font_btn_pri = tkfont.Font(family="Arial", size=11, weight="bold")
+        self._font_btn_sec = tkfont.Font(family="Arial", size=10)
+        self._font_stat    = tkfont.Font(family="Arial", size=9)
+        self._font_ticker  = tkfont.Font(family="Consolas", size=10)
+        self._font_log     = tkfont.Font(family="Consolas", size=10)
+
+        self._resize_after_id = None
+        self.root.bind("<Configure>", self._on_window_configure)
         self.root.bind("<Escape>", lambda e: self._exit_fullscreen())
 
         self.username        = ""
@@ -66,6 +79,38 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.screens = {}
         self._build_all_screens()
         self.show_screen("start")
+
+    def _on_window_configure(self, event=None):
+        """Debounced resize handler — updates fonts after window stops resizing."""
+        if self._resize_after_id:
+            self.root.after_cancel(self._resize_after_id)
+        self._resize_after_id = self.root.after(150, self._apply_font_scale)
+
+    def _apply_font_scale(self):
+        """Scale UI fonts proportionally to the current window size."""
+        try:
+            w = self.root.winfo_width()
+            h = self.root.winfo_height()
+        except tk.TclError:
+            return
+        if w < 100 or h < 100:
+            return
+        scale = max(0.7, min(1.8, w / 900))
+        self._font_money.configure(  size=max(14, int(22 * scale)))
+        self._font_day.configure(    size=max(10, int(14 * scale)))
+        self._font_btn_pri.configure(size=max(9,  int(11 * scale)))
+        self._font_btn_sec.configure(size=max(8,  int(10 * scale)))
+        self._font_stat.configure(   size=max(7,  int(9  * scale)))
+        self._font_ticker.configure( size=max(8,  int(10 * scale)))
+        self._font_log.configure(    size=max(8,  int(10 * scale)))
+        # Redraw clock at scaled size
+        sz = max(40, min(80, int(52 * scale)))
+        if hasattr(self, "clock_canvas"):
+            try:
+                self.clock_canvas.config(width=sz, height=sz)
+                self._draw_clock()
+            except tk.TclError:
+                pass
 
     def _toggle_fullscreen(self, event=None):
         self._is_fullscreen = not self._is_fullscreen
@@ -122,6 +167,12 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.blockaded_days     = 0
         self.advisor_cursed_days = 0
         self.factories          = []
+        self.work_level         = 0
+        self.max_loans          = 1
+        self.loan_slots_purchased = 0
+        self.rival_retaliation_boost = 0   # days remaining of doubled rival attack rate
+        self.casino_visited     = False
+        self.child_labor_scandal_used = False   # one-time major scandal flag
 
     # =========================================================
     # GAME START

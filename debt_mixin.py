@@ -28,6 +28,12 @@ class DebtMixin:
         debt_color = "#ff4444" if total_owed > 0 else "#00ff90"
         tk.Label(win, text=f"Total Owed: ${total_owed:,.0f}",
                  font=("Arial", 11, "bold"), bg="#0e1117", fg=debt_color).pack(pady=(0, 2))
+        max_loans = getattr(self, "max_loans", 1)
+        active    = len(getattr(self, "loans", []))
+        slots_color = "#ffaa00" if active >= max_loans else "#00ff90"
+        tk.Label(win,
+                 text=f"Loan slots: {active}/{max_loans}  |  Upgrade slots to borrow more simultaneously.",
+                 font=("Arial", 9), bg="#0e1117", fg=slots_color).pack(pady=(0, 2))
         tk.Label(win,
                  text="⚠  Loans compound daily. Default penalty: 25% of balance + 10 transgressions.",
                  font=("Arial", 8), bg="#0e1117", fg="#666").pack(pady=(0, 4))
@@ -96,10 +102,55 @@ class DebtMixin:
                           relief="flat", padx=8, pady=3,
                           command=repay).pack(side="right")
 
+        # ── Loan slot upgrades ────────────────────────────────────────
+        tk.Frame(inner, bg="#333", height=1).pack(fill="x", padx=24, pady=8)
+        tk.Label(inner, text="Loan Slot Upgrades", font=("Arial", 10, "bold"),
+                 bg="#0e1117", fg="#aaaaaa").pack(pady=(0, 4))
+
+        SLOT_UPGRADES = [
+            {"slots": 2, "cost": 500_000_000,   "label": "Slot 2 — 2 simultaneous loans"},
+            {"slots": 3, "cost": 2_000_000_000, "label": "Slot 3 — 3 simultaneous loans"},
+        ]
+        for su in SLOT_UPGRADES:
+            already = getattr(self, "max_loans", 1) >= su["slots"]
+            su_row  = tk.Frame(inner, bg="#1a1f2e", pady=6, padx=12)
+            su_row.pack(fill="x", padx=16, pady=2)
+            tk.Label(su_row, text=su["label"] + ("  ✅ OWNED" if already else ""),
+                     font=("Arial", 10), bg="#1a1f2e",
+                     fg="#00ff90" if already else "white").pack(side="left")
+            if not already:
+                can = self.money >= su["cost"]
+                def _buy_slot(s=su, w=win):
+                    if self.money < s["cost"]:
+                        self.log_event(f"Can't afford loan slot upgrade (${s['cost']:,})")
+                        return
+                    self.money -= s["cost"]
+                    self.market.money = self.money
+                    self.max_loans = s["slots"]
+                    self.loan_slots_purchased += 1
+                    self.log_event(f"Loan slot upgraded — now {s['slots']} simultaneous loans allowed.")
+                    self.update_status()
+                    w.destroy()
+                    self.open_debt_window()
+                tk.Button(su_row,
+                          text=f"Buy — ${su['cost']:,.0f}",
+                          font=("Arial", 9, "bold"),
+                          bg="#886600" if can else "#2a2a2a",
+                          fg="white" if can else "#555",
+                          relief="flat", padx=10, pady=3,
+                          state="normal" if can else "disabled",
+                          command=_buy_slot).pack(side="right")
+
         # ── New loans ─────────────────────────────────────────────────
         tk.Frame(inner, bg="#333", height=1).pack(fill="x", padx=24, pady=8)
         tk.Label(inner, text="New Loans", font=("Arial", 10, "bold"),
                  bg="#0e1117", fg="#aaaaaa").pack(pady=(0, 4))
+
+        at_limit = len(getattr(self, "loans", [])) >= getattr(self, "max_loans", 1)
+        if at_limit:
+            tk.Label(inner,
+                     text="⛔  Loan limit reached. Repay a loan or upgrade your slot capacity.",
+                     font=("Arial", 9, "bold"), bg="#0e1117", fg="#ff4444").pack(pady=6)
 
         for opt in LOAN_OPTIONS:
             # Estimated total repayment
@@ -122,6 +173,9 @@ class DebtMixin:
             def take(o=opt, w=win):
                 if not hasattr(self, "loans"):
                     self.loans = []
+                if len(self.loans) >= getattr(self, "max_loans", 1):
+                    self.log_event("⛔ Loan limit reached — repay existing loan or upgrade slots.")
+                    return
                 self.money += o["amount"]
                 self.market.money = self.money
                 self.loans.append({
@@ -140,8 +194,11 @@ class DebtMixin:
                 self.open_debt_window()
 
             tk.Button(row, text="Borrow",
-                      font=("Arial", 10, "bold"), bg="#ff6600", fg="white",
+                      font=("Arial", 10, "bold"),
+                      bg="#555" if at_limit else "#ff6600",
+                      fg="#333" if at_limit else "white",
                       relief="flat", padx=14, pady=5,
+                      state="disabled" if at_limit else "normal",
                       command=take).pack(side="right")
 
     def process_loans(self):

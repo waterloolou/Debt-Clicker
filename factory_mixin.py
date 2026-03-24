@@ -64,22 +64,26 @@ WORKER_TIERS = [
     {
         "id": "underpaid",
         "name": "Underpaid Labor",
-        "wage_mult": 0.50,
-        "income_mult": 0.80,
-        "opinion_per_day": -3,
+        "wage_mult": 0.20,
+        "income_mult": 2.00,
+        "opinion_per_day": -5,
         "happiness_per_day": 0,
+        "strike_chance": 0.45,
+        "accident_chance": 0.25,
         "color": "#ff4444",
-        "desc": "Half wages. Workers are miserable. Public will find out.",
+        "desc": "20% wages, 2× income. Workers will revolt. High accident risk.",
     },
     {
         "id": "minimum",
         "name": "Minimum Wage",
-        "wage_mult": 0.75,
-        "income_mult": 0.90,
-        "opinion_per_day": -1,
+        "wage_mult": 0.45,
+        "income_mult": 1.40,
+        "opinion_per_day": -2,
         "happiness_per_day": 0,
+        "strike_chance": 0.20,
+        "accident_chance": 0.10,
         "color": "#ff8800",
-        "desc": "Technically legal. Barely. Slow opinion bleed.",
+        "desc": "Technically legal. High strike risk. Significant income bonus.",
     },
     {
         "id": "standard",
@@ -88,28 +92,34 @@ WORKER_TIERS = [
         "income_mult": 1.00,
         "opinion_per_day": 0,
         "happiness_per_day": 0,
+        "strike_chance": 0.05,
+        "accident_chance": 0.04,
         "color": "#aaaaaa",
-        "desc": "Fair market rate. No bonuses, no backlash.",
+        "desc": "Fair market rate. Balanced risk and reward.",
     },
     {
         "id": "skilled",
         "name": "Skilled Workforce",
-        "wage_mult": 1.40,
-        "income_mult": 1.20,
+        "wage_mult": 1.50,
+        "income_mult": 0.90,
         "opinion_per_day": 0.5,
         "happiness_per_day": 0.2,
+        "strike_chance": 0.01,
+        "accident_chance": 0.01,
         "color": "#44aaff",
-        "desc": "Pay more, earn more. Good for PR.",
+        "desc": "Higher wages, slightly less income. Great PR, very safe.",
     },
     {
         "id": "unionized",
         "name": "Unionized Labor",
-        "wage_mult": 1.80,
-        "income_mult": 1.10,
-        "opinion_per_day": 1.0,
+        "wage_mult": 2.80,
+        "income_mult": 0.50,
+        "opinion_per_day": 2.0,
         "happiness_per_day": 0.3,
+        "strike_chance": 0.00,
+        "accident_chance": 0.005,
         "color": "#ffaa00",
-        "desc": "Strong union contract. Best public image. Cannot lower wages below this.",
+        "desc": "2.8× wages, 50% income. Excellent PR. Cannot lower wages. No strikes.",
     },
 ]
 
@@ -178,8 +188,10 @@ class FactoryMixin:
         worker  = _WORKER_BY_ID[fac["worker_tier"]]
         color   = ftype["color"]
 
-        daily_income = int(ftype["income"] * worker["income_mult"])
-        daily_wages  = int(ftype["base_wage_cost"] * worker["wage_mult"])
+        child_mult = 1.35 if fac.get("child_labor") else 1.0
+        alliance_mult = 0.85 if self.alliance else 1.0
+        daily_income = int(ftype["income"] * worker["income_mult"] * child_mult * alliance_mult)
+        daily_wages  = 0 if fac.get("child_labor") else int(ftype["base_wage_cost"] * worker["wage_mult"])
         daily_net    = daily_income - daily_wages
 
         outer = tk.Frame(parent, bg="#1a1f2e", padx=12, pady=10)
@@ -199,6 +211,12 @@ class FactoryMixin:
         tk.Label(info, text=stats_txt, font=("Arial", 8),
                  bg="#1a1f2e", fg="#aaaaaa").pack(anchor="w", pady=(2, 4))
 
+        if fac.get("child_labor"):
+            tk.Label(info, text="👶 CHILD LABOUR ACTIVE — wages $0, income +35%, exposure risk 30%/day",
+                     font=("Arial", 8, "bold"), bg="#1a1f2e", fg="#ff44ff").pack(anchor="w")
+        if self.alliance:
+            tk.Label(info, text=f"⚠ Alliance oversight: −15% factory income",
+                     font=("Arial", 8, "italic"), bg="#1a1f2e", fg="#aaaaff").pack(anchor="w")
         if fac.get("shutdown_days", 0) > 0:
             tk.Label(info,
                      text=f"🚫 SHUTDOWN — {fac['shutdown_days']} days remaining  (no income, wages still due)",
@@ -244,9 +262,28 @@ class FactoryMixin:
             eff_parts.append(f"Happiness {sign}{worker['happiness_per_day']:.1f}/day")
         if ftype.get("trans_per_day"):
             eff_parts.append(f"+{ftype['trans_per_day']} transgressions/day")
+        eff_parts.append(f"Strike risk: {int(worker['strike_chance']*100)}%/day")
         if eff_parts:
             tk.Label(info, text="  ".join(eff_parts),
                      font=("Arial", 8, "italic"), bg="#1a1f2e", fg="#777").pack(anchor="w", pady=(4, 0))
+
+        # Child labor toggle (only available for underpaid/minimum, not unionized)
+        if fac.get("worker_tier") in ("underpaid", "minimum") and not fac.get("unionized"):
+            cl_active = fac.get("child_labor", False)
+            cl_row = tk.Frame(info, bg="#1a1f2e")
+            cl_row.pack(anchor="w", pady=(4, 0))
+            def _toggle_child_labor(f=fac, w=win):
+                f["child_labor"] = not f.get("child_labor", False)
+                w.destroy()
+                self.open_factory_window()
+            tk.Button(cl_row,
+                      text="👶 Disable Child Labour" if cl_active else "👶 Enable Child Labour",
+                      font=("Arial", 8), relief="flat", padx=8, pady=3,
+                      bg="#ff44ff" if cl_active else "#2a1a2a",
+                      fg="black" if cl_active else "#ff44ff",
+                      command=_toggle_child_labor).pack(side="left", padx=2)
+            tk.Label(cl_row, text="  $0 wages · +35% income · 30%/day exposure risk",
+                     font=("Arial", 7, "italic"), bg="#1a1f2e", fg="#884488").pack(side="left")
 
     def _build_factory_buy_row(self, parent, ftype, already_owned, win):
         color = ftype["color"] if not already_owned else "#444"
@@ -349,8 +386,10 @@ class FactoryMixin:
                 if fac["damaged_days"] == 0:
                     self.log_event(f"🏭 {ftype['name']} repairs complete — back to full capacity.")
 
-            income = int(ftype["income"] * worker["income_mult"] * income_mult_extra)
-            wages  = int(ftype["base_wage_cost"] * worker["wage_mult"])
+            child_mult = 1.35 if fac.get("child_labor") else 1.0
+            alliance_mult = 0.85 if self.alliance else 1.0
+            income = int(ftype["income"] * worker["income_mult"] * income_mult_extra * child_mult * alliance_mult)
+            wages  = 0 if fac.get("child_labor") else int(ftype["base_wage_cost"] * worker["wage_mult"])
             total_income += income
             total_wages  += wages
 
@@ -381,58 +420,85 @@ class FactoryMixin:
     def check_factory_events(self):
         if not self.factories:
             return
-        if random.random() > 0.18:   # ~18% chance per day
-            return
 
-        fac   = random.choice(self.factories)
-        ftype = _FACTORY_BY_ID[fac["type_id"]]
-        color = ftype["color"]
-        event = random.choice(["strike", "accident", "whistleblower",
-                               "record_profits", "union_drive", "inspection"])
-
-        if event == "strike":
-            if fac.get("on_strike"):
-                return
+        # Per-factory per-day checks for strike, revolt, accident, child labor exposure
+        for fac in self.factories:
+            if fac.get("on_strike") or fac.get("shutdown_days", 0) > 0:
+                continue
+            ftype  = _FACTORY_BY_ID[fac["type_id"]]
             worker = _WORKER_BY_ID[fac["worker_tier"]]
-            # Only underpaid/minimum wage workers strike
-            if worker["id"] not in ("underpaid", "minimum"):
-                event = "record_profits"   # fallback
-            else:
+
+            # Child labor exposure check
+            if fac.get("child_labor"):
+                if random.random() < 0.30:
+                    self._trigger_child_labor_exposure(fac, ftype)
+                    continue
+
+            # Revolt (underpaid only)
+            if worker["id"] == "underpaid" and not fac.get("on_strike"):
+                if random.random() < 0.15:   # extra revolt chance on top of strike
+                    shut = random.randint(4, 8)
+                    fac["shutdown_days"] = shut
+                    self.public_opinion = max(0, self.public_opinion - 20)
+                    self.log_event(
+                        f"💢 WORKER REVOLT at {ftype['name']}! Equipment destroyed. "
+                        f"Shutdown {shut} days. Opinion -20.")
+                    self._show_factory_event(
+                        ftype, "#ff2222", "Worker Revolt",
+                        f"Your underpaid workers have destroyed equipment\n"
+                        f"and barricaded the {ftype['name']}.\n\n"
+                        f"Shutdown {shut} days  |  Public Opinion −20\n\n"
+                        f"Raise wages to prevent revolts.")
+                    continue
+
+            # Per-tier strike chance
+            if random.random() < worker["strike_chance"]:
+                if fac.get("on_strike"):
+                    continue
                 duration = random.randint(2, 5)
                 fac["on_strike"]   = True
                 fac["strike_days"] = duration
                 self.public_opinion = max(0, self.public_opinion - 12)
                 self.log_event(
-                    f"🪧 STRIKE at {ftype['name']}! Workers walk out for {duration} days. "
-                    f"Opinion -12. Raise wages to prevent future strikes.")
+                    f"🪧 STRIKE at {ftype['name']}! Workers walk out for {duration} days. Opinion -12.")
                 self._show_factory_event(
-                    ftype, color, "Workers' Strike",
+                    ftype, ftype["color"], "Workers' Strike",
                     f"Your {ftype['name']} workers have walked out.\n\n"
                     f"Production halted for {duration} days.\n"
-                    f"Public Opinion -12\n\n"
-                    f"Tip: Raise worker tier to prevent future strikes.")
-                return
+                    f"Public Opinion −12\n\n"
+                    f"Raise worker tier to reduce strike risk.")
+                continue
 
-        if event == "accident":
-            fine    = int(self.money * random.uniform(0.02, 0.06))
-            trans   = random.randint(10, 20)
-            dmg_days = random.randint(3, 7)
-            self.money -= fine
-            self.market.money = self.money
-            self.add_transgression(trans, 10)
-            self.public_opinion = max(0, self.public_opinion - 15)
-            fac["damaged_days"] = dmg_days          # ← factory at 50% for N days
-            self.log_event(
-                f"💥 ACCIDENT at {ftype['name']}! Fine: -${fine:,.0f} | "
-                f"Transgressions +{trans} | Opinion -15 | "
-                f"Running at 50% capacity for {dmg_days} days")
-            self._show_factory_event(
-                ftype, "#ff2222", "Factory Accident",
-                f"An explosion at your {ftype['name']} has made headlines.\n\n"
-                f"-${fine:,.0f}  |  Transgressions +{trans}  |  Opinion -15\n\n"
-                f"Factory running at 50% capacity for {dmg_days} days while repairs complete.")
+            # Per-tier accident chance
+            if random.random() < worker["accident_chance"]:
+                fine     = int(self.money * random.uniform(0.02, 0.06))
+                trans    = random.randint(10, 20)
+                dmg_days = random.randint(3, 7)
+                self.money -= fine
+                self.market.money = self.money
+                self.add_transgression(trans, 10)
+                self.public_opinion = max(0, self.public_opinion - 15)
+                fac["damaged_days"] = dmg_days
+                self.log_event(
+                    f"💥 ACCIDENT at {ftype['name']}! Fine: -${fine:,.0f} | "
+                    f"Trans +{trans} | Opinion -15 | 50% capacity for {dmg_days} days")
+                self._show_factory_event(
+                    ftype, "#ff2222", "Factory Accident",
+                    f"An explosion at your {ftype['name']} made headlines.\n\n"
+                    f"-${fine:,.0f}  |  Trans +{trans}  |  Opinion -15\n\n"
+                    f"50% capacity for {dmg_days} days while repairs complete.")
+                continue
 
-        elif event == "whistleblower":
+        # General random event pool (~18% chance per day, one factory)
+        if random.random() > 0.18:
+            return
+
+        fac   = random.choice(self.factories)
+        ftype = _FACTORY_BY_ID[fac["type_id"]]
+        color = ftype["color"]
+        event = random.choice(["whistleblower", "record_profits", "union_drive", "inspection"])
+
+        if event == "whistleblower":
             trans     = random.randint(12, 25)
             shut_days = random.randint(2, 4)
             self.add_transgression(trans, 8)
@@ -486,6 +552,42 @@ class FactoryMixin:
                 f"Fine: -${fine:,.0f}{shut_txt}\n\n"
                 f"(Reduce transgressions to avoid future inspections)")
 
+        self.update_status()
+
+    def _trigger_child_labor_exposure(self, fac, ftype):
+        """Child labour scandal — heavy penalties, rival forced smear."""
+        shut_days = random.randint(5, 10)
+        fac["shutdown_days"] = shut_days
+        fac["child_labor"]   = False   # shut it down after exposure
+        self.public_opinion  = max(0, self.public_opinion - 40)
+        self.add_transgression(25, 0)
+
+        # One-time major scandal bonus penalty
+        extra = ""
+        if not self.child_labor_scandal_used:
+            self.child_labor_scandal_used = True
+            fac["shutdown_days"] += 3
+            shut_days = fac["shutdown_days"]
+            self.public_opinion = max(0, self.public_opinion - 15)
+            self.add_transgression(10, 0)
+            extra = "\n\nMAJOR SCANDAL — international coverage. Extra −15 opinion, +10 trans, +3 shutdown days."
+
+        self.log_event(
+            f"👶 CHILD LABOUR EXPOSED at {ftype['name']}! "
+            f"Opinion -40 | Trans +25 | Shutdown {shut_days} days")
+
+        # Force rival smear
+        if self.rivals:
+            rival = random.choice(list(self.rivals.values()))
+            self.public_opinion = max(0, self.public_opinion - 10)
+            self.log_event(
+                f"📢 {rival['name']} exploits the scandal — smear campaign. Opinion -10.")
+
+        self._show_factory_event(
+            ftype, "#ff44ff", "Child Labour Exposed",
+            f"Journalists have exposed child labour at your {ftype['name']}.\n\n"
+            f"Opinion −40  |  Trans +25  |  Shutdown {shut_days} days\n"
+            f"Child labour has been disabled." + extra)
         self.update_status()
 
     def _show_factory_event(self, ftype, color, title, body):

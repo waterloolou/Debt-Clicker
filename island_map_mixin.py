@@ -393,6 +393,13 @@ class IslandMapMixin:
             win.protocol("WM_DELETE_WINDOW",
                          lambda: [plt.close(fig), win.destroy()])
 
+            def _on_island_resize(e, _fig=fig, _canvas=canvas):
+                new_w = max(1, e.width  - 16)
+                new_h = max(1, e.height - 100)
+                _fig.set_size_inches(new_w / 96, new_h / 96, forward=True)
+                _canvas.draw_idle()
+            win.bind("<Configure>", _on_island_resize)
+
         threading.Thread(target=_build, daemon=True).start()
 
     def _island_status_text(self):
@@ -545,14 +552,43 @@ class IslandMapMixin:
         if owned:
             tk.Label(popup, text="✅  You own this island.",
                      font=("Arial", 11, "bold"), bg="#0e1117",
-                     fg="#00ff90").pack(pady=8)
+                     fg="#00ff90").pack(pady=4)
             tk.Label(popup,
                      text=f"Generating ${isl['income']:,}/day",
                      font=("Arial", 10), bg="#0e1117", fg="#00cc70").pack()
+
+            # Frame a Rival button
+            if self.rivals:
+                tk.Frame(popup, bg="#333", height=1).pack(fill="x", padx=20, pady=8)
+                tk.Label(popup, text="🎭 Frame a Rival",
+                         font=("Arial", 10, "bold"), bg="#0e1117", fg="#ff8844").pack()
+                tk.Label(popup,
+                         text="Invite a rival to your island and leak it to the press.\n"
+                              "Costs $10M. Rival loses 20–40% wealth. Triggers retaliation.",
+                         font=("Arial", 8), bg="#0e1117", fg="#888",
+                         justify="center", wraplength=340).pack(pady=2)
+                from tkinter import ttk
+                rival_names = list(self.rivals.keys())
+                sel_var = tk.StringVar(value=rival_names[0])
+                dd = ttk.Combobox(popup, textvariable=sel_var, values=rival_names,
+                                  state="readonly", width=18)
+                dd.pack(pady=4)
+                can_frame = self.money >= 10_000_000
+                def _do_frame(i=isl, p=popup):
+                    self._frame_rival_on_island(i["name"], sel_var.get())
+                    p.destroy()
+                tk.Button(popup,
+                          text="Frame Rival ($10M)" if can_frame else "Need $10M",
+                          font=("Arial", 10, "bold"),
+                          bg="#cc4400" if can_frame else "#2a1a1a",
+                          fg="white", relief="flat", padx=12, pady=5,
+                          state="normal" if can_frame else "disabled",
+                          command=_do_frame).pack(pady=2)
+
             tk.Button(popup, text="Close",
                       bg="#1e2130", fg="white", relief="flat",
                       padx=20, pady=6,
-                      command=popup.destroy).pack(pady=14)
+                      command=popup.destroy).pack(pady=8)
         else:
             rows = [
                 ("Purchase Price", f"${isl['price']:,}"),
@@ -709,6 +745,67 @@ class IslandMapMixin:
 
     # =========================================================
     # DAILY ISLAND INCOME  (called from game.py main_loop)
+    def _frame_rival_on_island(self, island_name, rival_name):
+        """Invite rival to any owned island and leak it to the press."""
+        import random
+        rival = self.rivals.get(rival_name)
+        if not rival:
+            return
+        if self.money < 10_000_000:
+            self.log_event("Not enough money to frame a rival ($10M required).")
+            return
+        self.money -= 10_000_000
+        self.market.money = self.money
+
+        # Rival loses wealth from scandal
+        hit = int(rival["money"] * random.uniform(0.20, 0.40))
+        rival["money"] = max(0, rival["money"] - hit)
+        rival["scandal"] = True
+
+        # Player gets small payout from tabloids
+        self.money += 3_000_000
+        self.market.money = self.money
+
+        # Market hit
+        self.apply_market_effect(["Finance", "Entertainment"], 0.92, 4,
+                                 f"{rival_name} island scandal")
+
+        # Activate retaliation boost for 15 days
+        self.rival_retaliation_boost = 15
+
+        self.log_event(
+            f"🎭 Framed {rival_name} at {island_name}! "
+            f"They lost ${hit:,}. +$3M from tabloids. "
+            f"Expect heavy retaliation for 15 days.")
+        self._add_ticker(
+            f"SCANDAL: {rival_name} linked to controversial private island gathering...")
+        self.update_status()
+
+        # Show result popup
+        win = tk.Toplevel(self.root)
+        win.title("Frame Successful")
+        win.configure(bg="#0e1117")
+        win.geometry("400x220")
+        win.resizable(False, False)
+        win.lift()
+        win.focus_force()
+        tk.Frame(win, bg="#cc4400", height=5).pack(fill="x")
+        tk.Label(win, text="🎭  FRAME SUCCESSFUL",
+                 font=("Impact", 18), bg="#0e1117", fg="#ff8844").pack(pady=(14, 2))
+        tk.Label(win,
+                 text=f"{rival_name} has been linked to {island_name}.\n\n"
+                      f"They lost ${hit:,} in reputation damage.\n"
+                      f"+$3M tabloid payout.\n\n"
+                      f"⚠ They will retaliate heavily for the next 15 days.",
+                 font=("Arial", 10), bg="#0e1117", fg="white",
+                 justify="center", wraplength=360).pack(pady=8)
+        tk.Button(win, text="Nice  [Enter]", font=("Arial", 10),
+                  bg="#cc4400", fg="white", relief="flat", padx=20, pady=5,
+                  command=win.destroy).pack(pady=(0, 14))
+        win.bind("<Return>", lambda e: win.destroy())
+        win.bind("<Escape>", lambda e: win.destroy())
+        win.after(12000, lambda: win.destroy() if win.winfo_exists() else None)
+
     # =========================================================
 
     def process_island_income(self):
