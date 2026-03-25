@@ -346,7 +346,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.log_event(f"Daily expenses: -${lost:,}")
         self.apply_asset_costs()
         # Daily metric drift
-        self.happiness      = max(0,   self.happiness      - 1)    # -1/day (was -2, too punishing)
+        self.happiness      = max(0,   self.happiness      - 4)
         self.public_opinion = min(100, self.public_opinion + 0.3)  # slow natural recovery
         # Transgressions very slowly decay when no active heat (below wanted level 2)
         if self.transgressions > 0 and self.wanted_level < 2:
