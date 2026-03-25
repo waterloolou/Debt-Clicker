@@ -46,7 +46,7 @@ class EventsMixin:
             self.money += 1000000
             self.show_event("Inheritance!", "Your Grandma died! She left you $1,000,000. RIP.")
 
-        elif r == 5:
+        elif r == 5 and any(s["shares"] > 0 for s in self.market.stocks.values()):
             for name in self.market.stocks:
                 self.market.stocks[name]["shares"] = 0
             self.show_event("Betrayal!", "Your financial advisor betrayed you and liquidated ALL of your stock shares!")
@@ -123,7 +123,7 @@ class EventsMixin:
             self.apply_market_effect(["Energy"], 0.91, 4, "War zone instability")
             self.add_transgression(18, 15)
 
-        elif r == 17 and not self.space:
+        elif r == 17 and "space" in self.owned_assets and not self.space:
             self.space = True
             if "jet" in self.owned_assets and not self.jet_skip_used:
                 self.jet_skip_used = True
@@ -162,7 +162,7 @@ class EventsMixin:
             self.apply_market_effect(["Energy"], 0.88, 5, "Oil spill disaster")
             self.add_transgression(12, 14)
 
-        elif r == 22:
+        elif r == 22 and "crypto" in self.owned_assets:
             self.money -= 10000000
             self.show_event("Crypto Rug Pull!", "You launched 'RichCoin' and immediately rug pulled it. Unfortunately you forgot you also invested $10,000,000 in it. Classic.")
             self.apply_market_effect(["Finance", "AI"], 0.93, 2, "Crypto collapse")
@@ -177,7 +177,7 @@ class EventsMixin:
                 self.show_event("Social Media Disaster!", "You accidentally tweeted your offshore bank account password. $8,000,000 vanished within minutes. The tweet got 2 million likes.")
             self.apply_market_effect(["Finance", "Technology"], 0.94, 2, "Data breach panic")
 
-        elif r == 24:
+        elif r == 24 and "art" in self.owned_assets:
             self.money -= 12000000
             self.show_event("Art Forgery!", "You sold fake Picassos to a Russian oligarch. He found out and sent some very polite gentlemen to collect. Lose $12,000,000.")
             self.apply_market_effect(["Entertainment"], 0.92, 3, "Art fraud scandal")
@@ -216,7 +216,7 @@ class EventsMixin:
             self.show_event("Lobbyist Caught!", "Your lobbyist was filmed handing a suitcase of cash to a senator in broad daylight. Lose $10,000,000. The senator kept the money.")
             self.apply_market_effect(["Finance", "Defense"], 0.93, 2, "Political corruption scandal")
 
-        elif r == 30:
+        elif r == 30 and ("yacht" in self.owned_assets or "jet" in self.owned_assets):
             if "yacht" in self.owned_assets:
                 self.money -= 800_000
                 self.show_event("Drunk Captain!", "Your yacht captain crashed into a buoy after one too many cocktails. Minor hull damage — $800,000 repair. At least it wasn't the highway.")
@@ -249,6 +249,32 @@ class EventsMixin:
                 self.money *= 0.60
                 self.show_event("Pandemic Investment!", "You invested your entire liquid assets into a company selling horse dewormer as a COVID cure. Lose 40% of your money. No refunds.")
                 self.apply_market_effect(["Healthcare"], 0.88, 3, "Medical misinformation")
+
+        elif r == 35 and "supercar" in self.owned_assets:
+            if random.random() < 0.5:
+                fine = 2_500_000
+                self.money -= fine
+                self.show_event("Street Racing Bust!", "You took your Lamborghini to a 3 AM drag race on the freeway. A cop was watching. Pay $2,500,000 in fines and hush money. The other guy was faster anyway.")
+                self.apply_market_effect(["Automotive"], 0.95, 2, "Reckless driving scandal")
+                self.add_transgression(5, 4)
+            else:
+                self.money -= 800_000
+                self.show_event("Supercar Prank!", "Your assistant 'borrowed' one of your Lamborghinis and posted a 200mph video online. The car is fine. The internet loves it. PR says +brand awareness. Still lost $800K in repairs.")
+
+        elif r == 36 and "penthouse" in self.owned_assets:
+            dmg = random.randint(3_000_000, 9_000_000)
+            self.money -= dmg
+            self.show_event("Penthouse Party Gone Wrong!", f"The rooftop party got slightly out of hand. 'Slightly' meaning a minor fire, 3 helicopters, and a senator's missing briefcase. Damages: ${dmg:,}.")
+            self.apply_market_effect(["Entertainment"], 0.94, 2, "Celebrity scandal")
+            self.add_transgression(7, 5)
+
+        elif r == 37 and "oil_rig" in self.owned_assets:
+            cost = 18_000_000
+            self.money -= cost
+            self.show_event("Oil Rig Blowout!", "A pressure valve failed on your offshore rig. Not your fault — that's what the lawyers said. EPA investigation launched. Pay $18,000,000 in emergency costs and settlements.")
+            self.apply_market_effect(["Energy"], 0.91, 4, "Oil rig incident")
+            self.apply_market_effect(["Retail"], 0.97, 2, "Fuel price uncertainty")
+            self.add_transgression(9, 7)
 
         self.market.money = self.money
 

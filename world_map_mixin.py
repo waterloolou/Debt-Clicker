@@ -195,25 +195,13 @@ class WorldMapMixin:
 
         header = tk.Frame(win, bg=CLR_OCEAN)
         header.pack(fill="x", padx=16, pady=(10, 0))
-        tk.Label(header, text="WORLD RESOURCE OPERATIONS",
+        tk.Label(header, text="WORLD MAP",
                  font=("Impact", 20), bg=CLR_OCEAN, fg="#ffaa00").pack(side="left")
-
         alliance_text = f"Alliance: {self.alliance} ({self.alliance_days}d)" if self.alliance else "Alliance: None"
         tk.Label(header, text=alliance_text,
                  font=("Arial", 9), bg=CLR_OCEAN, fg="#4499ff").pack(side="right", padx=10)
-
-        sel = tk.Frame(header, bg=CLR_OCEAN)
-        sel.pack(side="right")
-        tk.Label(sel, text="Resource:", font=("Arial", 10),
-                 bg=CLR_OCEAN, fg="#888").pack(side="left", padx=(0, 6))
-        self._resource_var = tk.StringVar(value="Oil")
-        menu = tk.OptionMenu(sel, self._resource_var, *RESOURCE_DATA.keys())
-        menu.config(bg="#1e2130", fg="white", activebackground="#2e3140",
-                    relief="flat", font=("Arial", 10), width=12, highlightthickness=0)
-        menu["menu"].config(bg="#1e2130", fg="white",
-                            activebackground="#2e3140", font=("Arial", 10))
-        menu.pack(side="left")
-        tk.Label(header, text="Bomb or stage a coup to seize resources.",
+        tk.Label(header,
+                 text="Click any country to interact  •  Scroll to zoom  •  Right-drag to pan",
                  font=("Arial", 9), bg=CLR_OCEAN, fg="#555").pack(side="left", padx=14)
 
         loading = tk.Label(win, text="Loading map data...",
@@ -238,7 +226,7 @@ class WorldMapMixin:
             ax.set_ylim(-90, 90)
 
             self._map_world = world
-            self._render_map(ax, self._resource_var.get())
+            self._render_map(ax)
 
             canvas = FigureCanvasTkAgg(fig, master=win)
             canvas.draw()
@@ -247,26 +235,55 @@ class WorldMapMixin:
 
             self._map_legend_frame = tk.Frame(win, bg=CLR_OCEAN)
             self._map_legend_frame.pack(pady=4)
-            self._rebuild_legend(self._resource_var.get())
+            self._rebuild_legend()
 
-            def _on_res_change(*_):
-                res = self._resource_var.get()
-                self._render_map(ax, res)
-                canvas.draw()
-                self._rebuild_legend(res)
+            # ── Zoom (mouse scroll) ───────────────────────────────────
+            def _on_scroll(event, _ax=ax, _cv=canvas):
+                if event.inaxes != _ax or event.xdata is None:
+                    return
+                factor = 0.70 if event.button == "up" else 1.40
+                xl, yl = _ax.get_xlim(), _ax.get_ylim()
+                cx, cy = event.xdata, event.ydata
+                _ax.set_xlim([cx + (x - cx) * factor for x in xl])
+                _ax.set_ylim([cy + (y - cy) * factor for y in yl])
+                _cv.draw_idle()
 
-            self._resource_var.trace_add("write", _on_res_change)
-            fig.canvas.mpl_connect(
-                "button_press_event",
-                lambda e: self._on_map_click(e, world, ax, canvas))
+            # ── Pan (right-click drag) ────────────────────────────────
+            _pan = {"x": None, "y": None}
+
+            def _on_press(event, _ax=ax, _cv=canvas, _w=world):
+                if event.button == 1:
+                    self._on_map_click(event, _w, _ax, _cv)
+                elif event.button == 3 and event.inaxes == _ax and event.xdata:
+                    _pan["x"] = event.xdata
+                    _pan["y"] = event.ydata
+
+            def _on_motion(event, _ax=ax, _cv=canvas):
+                if _pan["x"] is None or event.inaxes != _ax or event.xdata is None:
+                    return
+                dx = _pan["x"] - event.xdata
+                dy = _pan["y"] - event.ydata
+                _ax.set_xlim([x + dx for x in _ax.get_xlim()])
+                _ax.set_ylim([y + dy for y in _ax.get_ylim()])
+                _cv.draw_idle()
+
+            def _on_release(event):
+                if event.button == 3:
+                    _pan["x"] = None
+                    _pan["y"] = None
+
+            fig.canvas.mpl_connect("scroll_event",         _on_scroll)
+            fig.canvas.mpl_connect("button_press_event",   _on_press)
+            fig.canvas.mpl_connect("motion_notify_event",  _on_motion)
+            fig.canvas.mpl_connect("button_release_event", _on_release)
             win.protocol("WM_DELETE_WINDOW",
                          lambda: [plt.close(fig), win.destroy()])
 
-            def _on_map_resize(e, _fig=fig, _canvas=canvas):
+            def _on_map_resize(e, _fig=fig, _cv=canvas):
                 new_w = max(1, e.width  - 16)
                 new_h = max(1, e.height - 80)
                 _fig.set_size_inches(new_w / 96, new_h / 96, forward=True)
-                _canvas.draw_idle()
+                _cv.draw_idle()
             win.bind("<Configure>", _on_map_resize)
 
         threading.Thread(target=_build, daemon=True).start()
@@ -275,111 +292,168 @@ class WorldMapMixin:
     # LEGEND
     # =========================================================
 
-    def _rebuild_legend(self, resource):
+    def _rebuild_legend(self):
         leg = self._map_legend_frame
         for w in leg.winfo_children():
             w.destroy()
-        res_clr = RESOURCE_DATA[resource]["clr"][0]
+        # One entry per resource type
+        for res_name, res_data in RESOURCE_DATA.items():
+            fill_clr, edge_clr = res_data["clr"]
+            dot = tk.Canvas(leg, width=12, height=12, bg=CLR_OCEAN, highlightthickness=0)
+            dot.create_oval(1, 1, 11, 11, fill=fill_clr, outline=edge_clr)
+            dot.pack(side="left", padx=(8, 3))
+            tk.Label(leg, text=res_name, font=("Arial", 8),
+                     bg=CLR_OCEAN, fg=edge_clr).pack(side="left", padx=(0, 10))
+        # Special states
         ally_label = f"Ally ({self.alliance})" if self.alliance else "Ally"
         for color, label in [
-            (res_clr,    f"{resource} reserves"),
             (CLR_BOMBED, "Bombed"),
             (CLR_COUP,   "Coup'd"),
-            (CLR_HOME,   "Your country"),
+            (CLR_HOME,   "You"),
             (CLR_ALLY,   ally_label),
-            (CLR_LAND,   "No resource"),
+            (CLR_LAND,   "No resources"),
         ]:
             dot = tk.Canvas(leg, width=12, height=12, bg=CLR_OCEAN, highlightthickness=0)
             dot.create_oval(1, 1, 11, 11, fill=color, outline="#555")
-            dot.pack(side="left", padx=(10, 3))
+            dot.pack(side="left", padx=(8, 3))
             tk.Label(leg, text=label, font=("Arial", 8),
-                     bg=CLR_OCEAN, fg="#888").pack(side="left", padx=(0, 14))
-        # Rival legend entries
+                     bg=CLR_OCEAN, fg="#888").pack(side="left", padx=(0, 10))
         for rival_name, rival in getattr(self, "rivals", {}).items():
             dot = tk.Canvas(leg, width=12, height=12, bg=CLR_OCEAN, highlightthickness=0)
             dot.create_oval(1, 1, 11, 11, fill=rival["color"], outline="#555")
-            dot.pack(side="left", padx=(10, 3))
+            dot.pack(side="left", padx=(8, 3))
             tk.Label(leg, text=rival_name, font=("Arial", 8),
-                     bg=CLR_OCEAN, fg=rival["color"]).pack(side="left", padx=(0, 14))
+                     bg=CLR_OCEAN, fg=rival["color"]).pack(side="left", padx=(0, 10))
 
     # =========================================================
     # RENDER MAP
     # =========================================================
 
-    def _render_map(self, ax, resource):
+    def _render_map(self, ax):
+        # Preserve current zoom/pan before clearing
+        prev_xl = ax.get_xlim()
+        prev_yl = ax.get_ylim()
         ax.cla()
         ax.set_facecolor(CLR_OCEAN)
         ax.set_axis_off()
-        ax.set_xlim(-180, 180)
-        ax.set_ylim(-90, 90)
+        # Restore zoom (default axes give (0,1) before first draw)
+        if prev_xl == (0.0, 1.0):
+            ax.set_xlim(-180, 180)
+            ax.set_ylim(-90, 90)
+        else:
+            ax.set_xlim(prev_xl)
+            ax.set_ylim(prev_yl)
 
-        world    = self._map_world
-        res_ctrs = RESOURCE_DATA[resource]["countries"]
-        fill_clr, edge_clr = RESOURCE_DATA[resource]["clr"]
-
+        world        = self._map_world
         home         = getattr(self, "country", "")
         action_taken = getattr(self, "action_taken", {})
         bombed_names = {c for c in self.bombed_countries
                         if action_taken.get(c, "Bomb") == "Bomb"}
         coup_names   = {c for c in self.bombed_countries
                         if action_taken.get(c) == "Stage a Coup"}
-
-        # Ally countries (cannot be attacked)
         ally_countries = set()
         if self.alliance:
-            ally_countries = self._ALLIANCE_DATA.get(self.alliance, {}).get("countries", set())
+            ally_countries = self._ALLIANCE_DATA.get(
+                self.alliance, {}).get("countries", set())
 
         home_mask     = world["NAME"] == home
         occupied_mask = world["NAME"].isin(self.bombed_countries)
         ally_mask     = world["NAME"].isin(ally_countries) & ~home_mask & ~occupied_mask
-        res_mask      = world["NAME"].isin(res_ctrs) & ~occupied_mask & ~home_mask & ~ally_mask
-        other_mask    = ~world["NAME"].isin(res_ctrs) & ~occupied_mask & ~home_mask & ~ally_mask
         bombed_mask   = world["NAME"].isin(bombed_names)
         coup_mask     = world["NAME"].isin(coup_names)
 
+        # ── Color each country by its dominant resource (priority order) ──
+        RESOURCE_PRIORITY = [
+            "Finance", "Technology", "Oil", "Diamonds", "Minerals", "Agriculture"
+        ]
+        already_colored = set()
+        for res_name in RESOURCE_PRIORITY:
+            res_data  = RESOURCE_DATA[res_name]
+            fill_clr, edge_clr = res_data["clr"]
+            countries_here = (set(res_data["countries"].keys()) - already_colored)
+            already_colored |= countries_here
+            draw_mask = (world["NAME"].isin(countries_here)
+                         & ~occupied_mask & ~home_mask & ~ally_mask)
+            if not world[draw_mask].empty:
+                world[draw_mask].plot(ax=ax, color=fill_clr, edgecolor=edge_clr,
+                                      linewidth=0.55, aspect=None)
+
+        # ── No-resource countries ─────────────────────────────────────
+        no_res_mask = (~world["NAME"].isin(already_colored)
+                       & ~occupied_mask & ~home_mask & ~ally_mask)
+        if not world[no_res_mask].empty:
+            world[no_res_mask].plot(ax=ax, color=CLR_LAND, edgecolor=CLR_EDGE,
+                                    linewidth=0.3, aspect=None)
+
+        # ── Special state overlays ────────────────────────────────────
         for df, clr, edge, lw in [
-            (world[other_mask],  CLR_LAND,   CLR_EDGE,    0.35),
-            (world[res_mask],    fill_clr,   edge_clr,    0.7),
-            (world[ally_mask],   CLR_ALLY,   CLR_ALLY_E,  0.9),
+            (world[ally_mask],   CLR_ALLY,   CLR_ALLY_E,   0.9),
             (world[bombed_mask], CLR_BOMBED, CLR_BOMBED_E, 0.8),
-            (world[coup_mask],   CLR_COUP,   CLR_COUP_E,  0.8),
-            (world[home_mask],   CLR_HOME,   CLR_HOME_E,  1.0),
+            (world[coup_mask],   CLR_COUP,   CLR_COUP_E,   0.8),
+            (world[home_mask],   CLR_HOME,   CLR_HOME_E,   1.0),
         ]:
             if not df.empty:
                 df.plot(ax=ax, color=clr, edgecolor=edge, linewidth=lw, aspect=None)
 
-        # Label allied countries
-        for _, row in world[ally_mask].iterrows():
-            cx, cy = row.geometry.centroid.x, row.geometry.centroid.y
-            ax.text(cx, cy - 2.5, row["NAME"] + " (ALLY)", color=CLR_ALLY_E, fontsize=4.5,
-                    ha="center", va="top", zorder=6,
-                    path_effects=[pe.withStroke(linewidth=1.5, foreground=CLR_OCEAN)])
+        # ── Build lookup: country → (edge_color, suffix) for labels ──
+        # Dominant resource edge color per country
+        country_label_clr = {}
+        for res_name in reversed(RESOURCE_PRIORITY):   # reverse so highest priority wins
+            for cname in RESOURCE_DATA[res_name]["countries"]:
+                country_label_clr[cname] = RESOURCE_DATA[res_name]["clr"][1]
 
-        for _, row in world[res_mask].iterrows():
-            cx, cy = row.geometry.centroid.x, row.geometry.centroid.y
-            ax.plot(cx, cy, marker="o", color=edge_clr, markersize=5, zorder=5)
-            ax.text(cx, cy - 2.5, row["NAME"], color=edge_clr, fontsize=5.5,
-                    ha="center", va="top", zorder=6,
-                    path_effects=[pe.withStroke(linewidth=1.5, foreground=CLR_OCEAN)])
+        # ── Label ALL countries ───────────────────────────────────────
+        for _, row in world.iterrows():
+            cname = row["NAME"]
+            if not row.geometry or row.geometry.is_empty:
+                continue
+            cx = row.geometry.centroid.x
+            cy = row.geometry.centroid.y
+            if cname == home:
+                lclr, suffix = "#5599ff", " ★"
+            elif cname in coup_names:
+                lclr, suffix = CLR_COUP_E, " ✦"
+            elif cname in bombed_names:
+                lclr, suffix = "#ff4444", " ✦"
+            elif cname in ally_countries:
+                lclr, suffix = CLR_ALLY_E, " ♦"
+            elif cname in country_label_clr:
+                lclr, suffix = country_label_clr[cname], ""
+            else:
+                lclr, suffix = "#5a5a5a", ""
+            ax.text(cx, cy, cname + suffix,
+                    color=lclr, fontsize=4.2, ha="center", va="center",
+                    zorder=6,
+                    path_effects=[pe.withStroke(linewidth=1.0, foreground=CLR_OCEAN)])
 
+        # ── Markers for special states ────────────────────────────────
         for _, row in world[occupied_mask].iterrows():
-            name = row["NAME"]
+            cname = row["NAME"]
             cx, cy = row.geometry.centroid.x, row.geometry.centroid.y
-            is_coup = name in coup_names
-            mc = CLR_COUP_E if is_coup else "#ff3333"
-            ax.plot(cx, cy, marker="D" if is_coup else "*", color=mc,
-                    markersize=7, zorder=5)
-            suffix = " (COUP)" if is_coup else " (BOMBED)"
-            ax.text(cx, cy - 3, name + suffix, color=mc, fontsize=5.5,
-                    ha="center", va="top", zorder=6,
-                    path_effects=[pe.withStroke(linewidth=1.5, foreground=CLR_OCEAN)])
+            mc = CLR_COUP_E if cname in coup_names else "#ff4444"
+            ax.plot(cx, cy, marker="D" if cname in coup_names else "*",
+                    color=mc, markersize=6, zorder=7)
 
         for _, row in world[home_mask].iterrows():
             cx, cy = row.geometry.centroid.x, row.geometry.centroid.y
-            ax.plot(cx, cy, marker="H", color=CLR_HOME_E, markersize=7, zorder=5)
-            ax.text(cx, cy - 3, row["NAME"] + " (YOU)", color="#5599ff",
-                    fontsize=5.5, ha="center", va="top", zorder=6,
-                    path_effects=[pe.withStroke(linewidth=1.5, foreground=CLR_OCEAN)])
+            ax.plot(cx, cy, marker="H", color=CLR_HOME_E, markersize=7, zorder=7)
+
+        for _, row in world[ally_mask].iterrows():
+            cx, cy = row.geometry.centroid.x, row.geometry.centroid.y
+            ax.plot(cx, cy, marker="^", color=CLR_ALLY_E, markersize=3.5, zorder=7)
+
+        # ── Rival territory markers ───────────────────────────────────
+        for rival in getattr(self, "rivals", {}).values():
+            all_controlled = set()
+            for countries in rival.get("controls", {}).values():
+                all_controlled |= set(countries)
+            for cname in all_controlled:
+                rmask = world["NAME"] == cname
+                if not world[rmask].empty:
+                    cx = world[rmask].iloc[0].geometry.centroid.x
+                    cy = world[rmask].iloc[0].geometry.centroid.y
+                    ax.plot(cx, cy, marker="s", color=rival["color"],
+                            markersize=4.5, zorder=8, alpha=0.85)
 
     # =========================================================
     # CLICK HANDLER
@@ -391,165 +465,531 @@ class WorldMapMixin:
         pt = shapely.geometry.Point(event.xdata, event.ydata)
         for _, row in world.iterrows():
             if row.geometry and row.geometry.contains(pt):
-                name = row["NAME"]
-                if name == getattr(self, "country", ""):
-                    self._show_homeland_popup(name)
-                    return
-                if name in self.bombed_countries:
-                    self._show_occupied_popup(name)
-                    return
-                res = self._resource_var.get()
-                if name in RESOURCE_DATA[res]["countries"]:
-                    self._show_action_popup(
-                        name, RESOURCE_DATA[res]["countries"][name],
-                        res, ax, canvas)
+                self._show_country_panel(row["NAME"], ax, canvas)
                 return
 
     # =========================================================
-    # HOMELAND POPUP
+    # COUNTRY PANEL  (universal — replaces homeland/occupied/action popups)
     # =========================================================
 
-    def _show_homeland_popup(self, name):
-        popup = tk.Toplevel(self.root)
-        popup.title(name)
-        popup.configure(bg="#0e1117")
-        popup.geometry("380x180")
-        popup.grab_set()
-        popup.resizable(False, False)
-        tk.Label(popup, text=f"Home: {name}",
-                 font=("Arial", 14, "bold"), bg="#0e1117", fg="#5599ff").pack(pady=(20, 6))
-        tk.Label(popup, text="This is your home country.\nYou can't attack where you're from.",
-                 font=("Arial", 10), bg="#0e1117", fg="#aaaaaa", justify="center").pack(pady=4)
-        tk.Button(popup, text="OK", bg="#1e2130", fg="white",
-                  relief="flat", padx=20, pady=6,
-                  command=popup.destroy).pack(pady=12)
+    def _show_country_panel(self, name, ax, canvas):
+        """Comprehensive country info + action panel for any clicked country."""
+        # Aggregate all resources this country has across all categories
+        country_resources = [
+            (res_name, res_data["countries"][name])
+            for res_name, res_data in RESOURCE_DATA.items()
+            if name in res_data["countries"]
+        ]
 
-    # =========================================================
-    # OCCUPIED POPUP
-    # =========================================================
-
-    def _show_occupied_popup(self, name):
-        popup = tk.Toplevel(self.root)
-        popup.title(name)
-        popup.configure(bg="#0e1117")
-        popup.geometry("420x240")
-        popup.grab_set()
-        popup.resizable(False, False)
-
+        is_home      = name == getattr(self, "country", "")
+        is_occupied  = name in self.bombed_countries
         action_taken = getattr(self, "action_taken", {})
-        action   = action_taken.get(name, "Bomb")
-        op       = next((o for o in self.oil_operations if o["country"] == name), None)
-        income   = op["income"]    if op else 0
-        days_rem = op["days_left"] if op else 0
-        resource = op.get("resource", "?") if op else "?"
-        status   = "Bombed" if action == "Bomb" else "Coup in progress"
+        action_name  = action_taken.get(name, "Bomb")
+        is_ally      = (bool(self.alliance) and
+                        name in self._ALLIANCE_DATA.get(
+                            self.alliance, {}).get("countries", set()))
 
+        # Find rival controls per resource
+        rival_controls = {}
+        for res_name, _ in country_resources:
+            rv = self.is_rival_controlled(res_name, name)
+            if rv:
+                rival_controls[res_name] = rv
+
+        popup = tk.Toplevel(self.root)
+        popup.title(name)
+        popup.configure(bg="#0e1117")
+        popup.geometry("560x520")
+        popup.grab_set()
+        popup.resizable(False, True)
+
+        # ── Header ────────────────────────────────────────────────
         tk.Label(popup, text=name,
-                 font=("Arial", 14, "bold"), bg="#0e1117", fg="#ffaa00").pack(pady=(18, 6))
-        tk.Label(popup, text=f"Status: {status}  |  Resource: {resource}",
-                 font=("Arial", 10), bg="#0e1117", fg="#888").pack()
-        tk.Label(popup,
-                 text=f"Income: ${income:,}/day\n{days_rem} day(s) remaining",
-                 font=("Arial", 11, "bold"), bg="#0e1117", fg="#00ff90").pack(pady=8)
+                 font=("Arial", 16, "bold"), bg="#0e1117", fg="#ffaa00").pack(pady=(16, 2))
+
+        badge_row = tk.Frame(popup, bg="#0e1117")
+        badge_row.pack(pady=(0, 4))
+        if is_home:
+            tk.Label(badge_row, text="🏠 YOUR HOME",
+                     font=("Arial", 9, "bold"), bg="#003366",
+                     fg="#5599ff", padx=8, pady=3).pack(side="left", padx=4)
+        if is_ally:
+            tk.Label(badge_row, text=f"🤝 ALLY — {self.alliance}",
+                     font=("Arial", 9, "bold"), bg=CLR_ALLY,
+                     fg=CLR_ALLY_E, padx=8, pady=3).pack(side="left", padx=4)
+        if is_occupied:
+            tag_color = CLR_COUP_E if action_name == "Stage a Coup" else CLR_BOMBED_E
+            tag_text  = "COUP" if action_name == "Stage a Coup" else "BOMBED"
+            tk.Label(badge_row, text=f"⚔ {tag_text} — ACTIVE OP",
+                     font=("Arial", 9, "bold"), bg="#1a0808",
+                     fg=tag_color, padx=8, pady=3).pack(side="left", padx=4)
+        if name in self.sanctions:
+            tk.Label(badge_row,
+                     text=f"🚫 SANCTIONING YOU — {self.sanctions[name]}d left",
+                     font=("Arial", 9, "bold"), bg="#2a0000",
+                     fg="#ff4444", padx=8, pady=3).pack(side="left", padx=4)
+
+        # Homeland — show info only, no actions
+        if is_home:
+            tk.Label(popup,
+                     text="Your base of operations.\nNo operations can be performed here.",
+                     font=("Arial", 10, "italic"), bg="#0e1117",
+                     fg="#aaaaaa", justify="center").pack(pady=14)
+            tk.Button(popup, text="Close", bg="#1e2130", fg="white",
+                      relief="flat", padx=20, pady=6,
+                      command=popup.destroy).pack(pady=6)
+            return
+
+        # ── Scrollable body ────────────────────────────────────────
+        cont  = tk.Frame(popup, bg="#0e1117")
+        cont.pack(fill="both", expand=True, padx=0, pady=(0, 8))
+        sc    = tk.Canvas(cont, bg="#0e1117", highlightthickness=0)
+        sb    = tk.Scrollbar(cont, orient="vertical", command=sc.yview)
+        inner = tk.Frame(sc, bg="#0e1117")
+        inner.bind("<Configure>",
+                   lambda e: sc.configure(scrollregion=sc.bbox("all")))
+        win_id = sc.create_window((0, 0), window=inner, anchor="nw")
+        sc.configure(yscrollcommand=sb.set)
+        sc.bind("<Configure>", lambda e: sc.itemconfig(win_id, width=e.width))
+        sb.pack(side="right", fill="y")
+        sc.pack(side="left", fill="both", expand=True)
+
+        def _mw(e):
+            try:
+                sc.yview_scroll(int(-1 * (e.delta / 120)), "units")
+            except tk.TclError:
+                pass
+        sc.bind_all("<MouseWheel>", _mw)
+        popup.bind("<Destroy>", lambda e: sc.unbind_all("<MouseWheel>"))
+
+        # ── Active operation info ─────────────────────────────────
+        if is_occupied:
+            op = next((o for o in self.oil_operations if o["country"] == name), None)
+            if op:
+                clr  = CLR_COUP_E if action_name == "Stage a Coup" else CLR_BOMBED_E
+                op_f = tk.Frame(inner, bg="#1a0a2e", padx=12, pady=10)
+                op_f.pack(fill="x", padx=12, pady=(4, 0))
+                tk.Label(op_f, text=f"ACTIVE OPERATION — {action_name.upper()}",
+                         font=("Arial", 10, "bold"), bg="#1a0a2e", fg=clr).pack(anchor="w")
+                tk.Label(op_f,
+                         text=(f"Resource: {op.get('resource','?')}  |  "
+                               f"${op['income']:,}/day  |  "
+                               f"{op['days_left']} day(s) remaining"),
+                         font=("Arial", 9), bg="#1a0a2e", fg="#aaaaaa").pack(anchor="w")
+
+        # ── Resource operations ────────────────────────────────────
+        if country_resources:
+            tk.Label(inner, text="RESOURCE OPERATIONS",
+                     font=("Impact", 13), bg="#0e1117", fg="#888888").pack(
+                     anchor="w", padx=16, pady=(10, 2))
+
+            for res_name, info in country_resources:
+                res_clr = RESOURCE_DATA[res_name]["clr"][1]
+                rv      = rival_controls.get(res_name)
+
+                card = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+                card.pack(fill="x", padx=12, pady=3)
+                tk.Frame(card, bg=res_clr, width=4).pack(
+                    side="left", fill="y", padx=(0, 10))
+                body = tk.Frame(card, bg="#141920")
+                body.pack(side="left", fill="both", expand=True)
+
+                tk.Label(body, text=res_name,
+                         font=("Arial", 11, "bold"), bg="#141920",
+                         fg=res_clr).pack(anchor="w")
+                tk.Label(body, text=info["reserves"],
+                         font=("Arial", 8, "italic"), bg="#141920",
+                         fg="#666").pack(anchor="w")
+                tk.Label(body,
+                         text=(f"${info['income']:,}/day  ×  {info['days']} days"
+                               f"  =  ${info['income'] * info['days']:,} total"),
+                         font=("Arial", 8), bg="#141920",
+                         fg="#888").pack(anchor="w", pady=(2, 4))
+
+                if is_ally:
+                    tk.Label(body, text="🤝 Allied nation — operations blocked.",
+                             font=("Arial", 8, "italic"), bg="#141920",
+                             fg=CLR_ALLY_E).pack(anchor="w")
+                elif is_occupied:
+                    tk.Label(body, text="✓ Operation already active in this country.",
+                             font=("Arial", 8, "italic"), bg="#141920",
+                             fg="#00ff90").pack(anchor="w")
+                else:
+                    if rv:
+                        rc = self.rivals[rv]["color"]
+                        tk.Label(body, text=f"⚠ Rival controlled: {rv}",
+                                 font=("Arial", 8, "bold"), bg="#141920",
+                                 fg=rc).pack(anchor="w", pady=(0, 4))
+                    btn_r = tk.Frame(body, bg="#141920")
+                    btn_r.pack(anchor="w")
+                    disc = self.get_alliance_discount(name)
+                    for aname, adef in ACTIONS.items():
+                        cost = int(info["action_cost"] * adef["cost_mult"] * disc)
+                        can  = self.money >= cost
+                        tk.Button(btn_r,
+                                  text=f"{aname}  ${cost:,}",
+                                  font=("Arial", 9, "bold"),
+                                  bg=adef["color"] if can else "#2a1a1a",
+                                  fg="white", relief="flat",
+                                  padx=10, pady=4,
+                                  state="normal" if can else "disabled",
+                                  command=lambda a=aname, i=info, r=res_name, p=popup:
+                                      self._execute_action(name, i, r, a, p, ax, canvas)
+                                  ).pack(side="left", padx=(0, 6))
+                    if rv:
+                        bo_cost = int(info["action_cost"] * 2)
+                        can_bo  = self.money >= bo_cost
+                        tk.Button(btn_r,
+                                  text=f"Buy Out {rv}  ${bo_cost:,}",
+                                  font=("Arial", 9),
+                                  bg="#2a1a3a",
+                                  fg=self.rivals[rv]["color"] if can_bo else "#555",
+                                  relief="flat", padx=10, pady=4,
+                                  state="normal" if can_bo else "disabled",
+                                  command=lambda r=res_name, rv_=rv, p=popup:
+                                      [self.buyout_rival(r, name, rv_), p.destroy()]
+                                  ).pack(side="left", padx=(0, 6))
+        else:
+            tk.Label(inner, text="No major resource deposits identified.",
+                     font=("Arial", 9, "italic"), bg="#0e1117",
+                     fg="#555").pack(pady=6, padx=16, anchor="w")
+
+        # ── Alternative operations ─────────────────────────────────
+        tk.Frame(inner, bg="#333", height=1).pack(fill="x", padx=16, pady=8)
+        tk.Label(inner, text="ALTERNATIVE OPERATIONS",
+                 font=("Impact", 13), bg="#0e1117", fg="#888888").pack(
+                 anchor="w", padx=16, pady=(0, 4))
+
+        # Trade Route
+        tr_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+        tr_f.pack(fill="x", padx=12, pady=3)
+        tk.Label(tr_f, text="📦  Establish Trade Route",
+                 font=("Arial", 10, "bold"), bg="#141920", fg="#00cc88").pack(anchor="w")
+        tk.Label(tr_f,
+                 text="Legal commerce deal.  $10M setup.  $500K/day for 15 days.  No penalties.",
+                 font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+        trade_active = any(o["country"] == name and o.get("resource") == "Trade"
+                           for o in self.oil_operations)
+        if trade_active:
+            tk.Label(tr_f, text="✓ Trade route already active.",
+                     font=("Arial", 8, "italic"), bg="#141920", fg="#00ff90").pack(anchor="w")
+        elif is_ally:
+            tk.Label(tr_f, text="✓ Alliance provides automatic trade benefits.",
+                     font=("Arial", 8, "italic"), bg="#141920", fg=CLR_ALLY_E).pack(anchor="w")
+        else:
+            can_tr = self.money >= 10_000_000
+            tk.Button(tr_f, text="Establish Trade Route  —  $10,000,000",
+                      font=("Arial", 9, "bold"),
+                      bg="#006644" if can_tr else "#2a2a2a",
+                      fg="white" if can_tr else "#555",
+                      relief="flat", padx=10, pady=4,
+                      state="normal" if can_tr else "disabled",
+                      command=lambda p=popup:
+                          self._establish_trade_route(name, p, ax, canvas)
+                      ).pack(anchor="w", pady=(4, 0))
+
+        # Lift Sanctions
+        if name in self.sanctions:
+            san_days   = self.sanctions[name]
+            bribe_cost = max(5_000_000, san_days * 3_000_000)
+            ls_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            ls_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(ls_f, text="🤝  Lift Sanctions",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#ffaa00").pack(anchor="w")
+            tk.Label(ls_f,
+                     text=(f"Remove {name}'s active sanctions on you.  "
+                           f"{san_days} day(s) remaining.  Cost: ${bribe_cost:,}"),
+                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+            can_ls = self.money >= bribe_cost
+            tk.Button(ls_f,
+                      text=f"Lift Sanctions  —  ${bribe_cost:,}",
+                      font=("Arial", 9, "bold"),
+                      bg="#886600" if can_ls else "#2a2a2a",
+                      fg="white" if can_ls else "#555",
+                      relief="flat", padx=10, pady=4,
+                      state="normal" if can_ls else "disabled",
+                      command=lambda bc=bribe_cost, p=popup:
+                          self._lift_sanctions(name, bc, p)
+                      ).pack(anchor="w", pady=(4, 0))
+
+        # ── Covert Operations ─────────────────────────────────────────
+        tk.Frame(inner, bg="#333", height=1).pack(fill="x", padx=16, pady=8)
+        tk.Label(inner, text="COVERT OPERATIONS",
+                 font=("Impact", 13), bg="#0e1117", fg="#888888").pack(
+                 anchor="w", padx=16, pady=(0, 4))
+
+        # Espionage
+        esp_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+        esp_f.pack(fill="x", padx=12, pady=3)
+        tk.Label(esp_f, text="🕵  Espionage Mission  —  $15M",
+                 font=("Arial", 10, "bold"), bg="#141920", fg="#cc88ff").pack(anchor="w")
+        tk.Label(esp_f,
+                 text="If rival operates here: steal 3 days of their income + sabotage. +8 trans.\n"
+                      "Otherwise: sell intel for $3–8M bonus.",
+                 font=("Arial", 8), bg="#141920", fg="#666",
+                 justify="left").pack(anchor="w", pady=2)
+        can_esp = not is_home and self.money >= 15_000_000
+        tk.Button(esp_f, text="Send Spy  —  $15,000,000",
+                  font=("Arial", 9, "bold"),
+                  bg="#4a1a6a" if can_esp else "#2a2a2a",
+                  fg="white" if can_esp else "#555",
+                  relief="flat", padx=10, pady=4,
+                  state="normal" if can_esp else "disabled",
+                  command=lambda p=popup:
+                      self._espionage_mission(name, p, ax, canvas)
+                  ).pack(anchor="w", pady=(4, 0))
+
+        # Proxy War (only if rival controls a resource here)
+        if rival_controls and not is_home:
+            rv_str = ", ".join(set(rival_controls.values()))
+            pw_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            pw_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(pw_f, text="⚔  Proxy War  —  $60M",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#ff6644").pack(anchor="w")
+            tk.Label(pw_f,
+                     text=f"Fund insurgents against {rv_str}'s operations here.\n"
+                          f"Removes all rival control from this country. +20 trans, -8 opinion.",
+                     font=("Arial", 8), bg="#141920", fg="#666",
+                     justify="left").pack(anchor="w", pady=2)
+            can_pw = self.money >= 60_000_000
+            tk.Button(pw_f, text="Fund Proxy War  —  $60,000,000",
+                      font=("Arial", 9, "bold"),
+                      bg="#5a1a1a" if can_pw else "#2a2a2a",
+                      fg="white" if can_pw else "#555",
+                      relief="flat", padx=10, pady=4,
+                      state="normal" if can_pw else "disabled",
+                      command=lambda p=popup:
+                          self._proxy_war(name, p, ax, canvas)
+                      ).pack(anchor="w", pady=(4, 0))
+
+        # Puppet Upgrade (only after a coup)
+        if is_occupied and action_name == "Stage a Coup":
+            pu_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            pu_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(pu_f, text="👑  Install Puppet Government  —  $100M",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#ffdd44").pack(anchor="w")
+            tk.Label(pu_f,
+                     text="Install loyal regime. +10 days on operation. Income doubled. +10 trans.",
+                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+            can_pu = self.money >= 100_000_000
+            tk.Button(pu_f, text="Install Puppet  —  $100,000,000",
+                      font=("Arial", 9, "bold"),
+                      bg="#5a4a00" if can_pu else "#2a2a2a",
+                      fg="white" if can_pu else "#555",
+                      relief="flat", padx=10, pady=4,
+                      state="normal" if can_pu else "disabled",
+                      command=lambda p=popup:
+                          self._install_puppet(name, p, ax, canvas)
+                      ).pack(anchor="w", pady=(4, 0))
+
+        # Arms Deal (non-ally, non-occupied, non-home)
+        if not is_ally and not is_occupied and not is_home:
+            ad_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            ad_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(ad_f, text="🔫  Arms Deal  —  net +$10M profit",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#ff4444").pack(anchor="w")
+            tk.Label(ad_f,
+                     text="Sell weapons. Requires $20M upfront. Returns $30M. +18 trans. Boosts Defense stocks.",
+                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+            can_ad = self.money >= 20_000_000
+            tk.Button(ad_f, text="Deal Arms  —  $20M cost / $30M return",
+                      font=("Arial", 9, "bold"),
+                      bg="#5a0000" if can_ad else "#2a2a2a",
+                      fg="white" if can_ad else "#555",
+                      relief="flat", padx=10, pady=4,
+                      state="normal" if can_ad else "disabled",
+                      command=lambda p=popup:
+                          self._arms_deal(name, p, ax, canvas)
+                      ).pack(anchor="w", pady=(4, 0))
+
+        # Foreign Aid (any country except home)
+        if not is_home:
+            fa_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            fa_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(fa_f, text="🤲  Foreign Aid  —  $25M",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#00cc88").pack(anchor="w")
+            tk.Label(fa_f,
+                     text="+10 public opinion. -8 transgressions. Reduces sanction risk from this country.",
+                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+            can_fa = self.money >= 25_000_000
+            tk.Button(fa_f, text="Send Foreign Aid  —  $25,000,000",
+                      font=("Arial", 9, "bold"),
+                      bg="#004a30" if can_fa else "#2a2a2a",
+                      fg="white" if can_fa else "#555",
+                      relief="flat", padx=10, pady=4,
+                      state="normal" if can_fa else "disabled",
+                      command=lambda p=popup:
+                          self._foreign_aid(name, p, ax, canvas)
+                      ).pack(anchor="w", pady=(4, 0))
+
         tk.Button(popup, text="Close", bg="#1e2130", fg="white",
                   relief="flat", padx=20, pady=6,
                   command=popup.destroy).pack(pady=8)
 
-    # =========================================================
-    # ACTION POPUP  (Bomb vs Coup)
-    # =========================================================
-
-    def _show_action_popup(self, name, info, resource, ax, canvas):
-        popup = tk.Toplevel(self.root)
-        popup.title(name)
-        popup.configure(bg="#0e1117")
-        popup.geometry("500x400")
-        popup.grab_set()
-        popup.resizable(False, False)
-
-        tk.Label(popup, text=name,
-                 font=("Arial", 14, "bold"), bg="#0e1117", fg="#ffaa00").pack(pady=(16, 2))
-        tk.Label(popup, text=f"{resource} — {info['reserves']}",
-                 font=("Arial", 9, "italic"), bg="#0e1117", fg="#666").pack()
-
-        # Block attacking allied countries
-        if self.alliance:
-            ally_countries = self._ALLIANCE_DATA.get(self.alliance, {}).get("countries", set())
-            if name in ally_countries:
-                tk.Label(popup,
-                         text=f"🤝 {name} is a member of your {self.alliance} alliance.\nYou cannot attack an ally.",
-                         font=("Arial", 10, "bold"), bg="#0e1117", fg=CLR_ALLY_E,
-                         justify="center").pack(pady=16)
-                tk.Button(popup, text="Close", bg="#1e2130", fg="white",
-                          relief="flat", padx=20, pady=6,
-                          command=popup.destroy).pack(pady=4)
-                return
-
-        # Check if rival controls this country
-        rival = self.is_rival_controlled(resource, name)
-        if rival:
-            rival_color = self.rivals[rival]["color"]
-            tk.Label(popup, text=f"Controlled by rival: {rival}",
-                     font=("Arial", 9, "bold"), bg="#0e1117", fg=rival_color).pack()
-            tk.Button(popup, text=f"Buy Out {rival} (2x cost)",
-                      font=("Arial", 9), bg="#2a1a3a", fg=rival_color,
-                      relief="flat", padx=10, pady=4,
-                      command=lambda: [self.buyout_rival(resource, name, rival), popup.destroy()]
-                      ).pack(pady=4)
-            tk.Button(popup, text="Cancel", bg="#1e2130", fg="#aaaaaa",
-                      relief="flat", padx=16, pady=5,
-                      command=popup.destroy).pack(pady=4)
+    def _establish_trade_route(self, country, popup, ax, canvas):
+        cost = 10_000_000
+        if self.money < cost:
+            self.log_event("Not enough funds to establish trade route.")
             return
+        self.money -= cost
+        self.market.money = self.money
+        self.oil_operations.append({
+            "country":   country,
+            "income":    500_000,
+            "days_left": 15,
+            "resource":  "Trade",
+            "action":    "Trade Route",
+        })
+        self.log_event(
+            f"📦 Trade Route established with {country}. $500K/day for 15 days.")
+        self._add_ticker(
+            f"MARKETS: {self.username} expands commercial ties with {country}.")
+        self.update_status()
+        popup.destroy()
+        self._render_map(ax)
+        canvas.draw()
 
-        for label, val in [
-            ("Base Income",   f"${info['income']:,}/day"),
-            ("Duration",      f"{info['days']} days"),
-            ("Total Revenue", f"${info['income'] * info['days']:,}"),
-        ]:
-            r = tk.Frame(popup, bg="#0e1117")
-            r.pack(fill="x", padx=60, pady=1)
-            tk.Label(r, text=label + ":", font=("Arial", 9),
-                     bg="#0e1117", fg="#666", width=14, anchor="w").pack(side="left")
-            tk.Label(r, text=val, font=("Arial", 9, "bold"),
-                     bg="#0e1117", fg="white").pack(side="left")
+    def _lift_sanctions(self, country, cost, popup):
+        if self.money < cost:
+            self.log_event(f"Not enough to lift sanctions (${cost:,})")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        del self.sanctions[country]
+        self.log_event(f"🤝 Sanctions from {country} lifted. Cost: ${cost:,}")
+        self.update_status()
+        popup.destroy()
 
-        tk.Frame(popup, bg="#333", height=1).pack(fill="x", padx=24, pady=10)
+    # =========================================================
+    # COVERT OPERATIONS
+    # =========================================================
 
-        btn_frame = tk.Frame(popup, bg="#0e1117")
-        btn_frame.pack()
+    def _espionage_mission(self, country, popup, ax, canvas):
+        import random
+        cost = 15_000_000
+        if self.money < cost:
+            self.log_event("Not enough funds for espionage mission ($15M).")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        # Check if a rival controls a resource here
+        rival_ops = [op for op in getattr(self, "oil_operations", [])
+                     if op.get("country") == country
+                     and op.get("action") in ("Bomb", "Coup", "Trade Route")]
+        if rival_ops:
+            # Steal income from rival intel
+            stolen = random.randint(3_000_000, 8_000_000)
+            self.money += stolen
+            self.market.money = self.money
+            self.log_event(
+                f"🕵 Espionage in {country}: intercepted rival operations — "
+                f"stole ${stolen:,} in intel value.")
+        else:
+            # Sell general intel
+            bonus = random.randint(2_000_000, 6_000_000)
+            self.money += bonus
+            self.market.money = self.money
+            self.log_event(
+                f"🕵 Espionage in {country}: sold intelligence dossier for ${bonus:,}.")
+        self.add_transgression(8, -3)
+        self._add_ticker(f"INTELLIGENCE: Covert activity detected near {country}.")
+        self.update_status()
+        popup.destroy()
+        self._render_map(ax)
+        canvas.draw()
 
-        for act_name, act in ACTIONS.items():
-            cost   = int(info["action_cost"] * act["cost_mult"])
-            income = int(info["income"]      * act["income_mult"])
-            days   = int(info["days"]        * act["days_mult"])
-            can    = self.money >= cost
+    def _proxy_war(self, country, popup, ax, canvas):
+        cost = 60_000_000
+        if self.money < cost:
+            self.log_event("Not enough funds for proxy war ($60M).")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        # Remove rival control (bombed status) from this country
+        removed = country in self.bombed_countries
+        self.bombed_countries.discard(country)
+        if hasattr(self, "action_taken"):
+            self.action_taken.pop(country, None)
+        self.log_event(
+            f"⚔ Proxy War in {country}: {'rival forces expelled' if removed else 'destabilization campaign launched'}. "
+            f"Cost: $60M")
+        self.add_transgression(20, -8)
+        self._add_ticker(
+            f"CONFLICT: Proxy forces escalate tensions in {country}.")
+        self.update_status()
+        popup.destroy()
+        self._render_map(ax)
+        canvas.draw()
 
-            col = tk.Frame(btn_frame, bg="#151820", padx=14, pady=10)
-            col.pack(side="left", padx=10)
+    def _install_puppet(self, country, popup, ax, canvas):
+        cost = 100_000_000
+        if self.money < cost:
+            self.log_event("Not enough funds to install puppet government ($100M).")
+            return
+        # Must have an active operation in this country
+        ops_here = [op for op in getattr(self, "oil_operations", [])
+                    if op.get("country") == country]
+        if not ops_here:
+            self.log_event(
+                f"No active operations in {country}. "
+                "Establish control first (Bomb/Coup/Trade Route).")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        for op in ops_here:
+            op["days_left"] = op.get("days_left", 0) + 10
+            op["income"] = int(op["income"] * 2)
+        self.log_event(
+            f"🏛 Puppet government installed in {country}. "
+            f"All operations: +10 days, income ×2. Cost: $100M")
+        self.add_transgression(10, -5)
+        self._add_ticker(
+            f"POLITICS: Regime change reported in {country}.")
+        self.update_status()
+        popup.destroy()
+        self._render_map(ax)
+        canvas.draw()
 
-            tk.Label(col, text=act_name, font=("Arial", 11, "bold"),
-                     bg="#151820", fg=act["color"]).pack()
-            tk.Label(col,
-                     text=f"Cost:          ${cost:,}\n"
-                          f"Income:        ${income:,}/day\n"
-                          f"Duration:      {days} days\n"
-                          f"Transgression: +{act['transgression']}\n"
-                          f"Opinion hit:   -{act['opinion']}",
-                     font=("Consolas", 8), bg="#151820", fg="#888",
-                     justify="left").pack(pady=6)
-            lbl = "Execute" if can else "Not enough money"
-            tk.Button(col, text=lbl,
-                      font=("Arial", 9, "bold"),
-                      bg=act["color"] if can else "#2a1a1a",
-                      fg="white", relief="flat", padx=10, pady=5,
-                      state="normal" if can else "disabled",
-                      command=lambda a=act_name: self._execute_action(
-                          name, info, resource, a, popup, ax, canvas)
-                      ).pack()
+    def _arms_deal(self, country, popup, ax, canvas):
+        cost = 20_000_000
+        returns = 30_000_000
+        if self.money < cost:
+            self.log_event("Not enough funds for arms deal ($20M).")
+            return
+        self.money -= cost
+        self.money += returns
+        self.market.money = self.money
+        # Small defense sector boost
+        if hasattr(self, "apply_market_effect"):
+            self.apply_market_effect(["Defense"], 1.05, 3, "Arms Deal")
+        self.log_event(
+            f"🔫 Arms Deal with {country}: paid $20M, received $30M. "
+            f"Net: +$10M. Defense stocks up +5% for 3 days.")
+        self.add_transgression(18, -6)
+        self._add_ticker(
+            f"MARKETS: Defense sector rises after arms shipment to {country}.")
+        self.update_status()
+        popup.destroy()
+        self._render_map(ax)
+        canvas.draw()
 
-        tk.Button(popup, text="Cancel", bg="#1e2130", fg="#aaaaaa",
-                  relief="flat", padx=16, pady=5,
-                  command=popup.destroy).pack(pady=(12, 4))
+    def _foreign_aid(self, country, popup, ax, canvas):
+        cost = 25_000_000
+        if self.money < cost:
+            self.log_event("Not enough funds for foreign aid ($25M).")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        self.log_event(
+            f"🤝 Foreign Aid sent to {country}: $25M. "
+            f"+10 public opinion, −8 transgressions.")
+        self.add_transgression(-8, 10)
+        self._add_ticker(
+            f"DIPLOMACY: {self.username} sends humanitarian aid to {country}.")
+        self.update_status()
+        popup.destroy()
+        self._render_map(ax)
+        canvas.draw()
 
     # =========================================================
     # EXECUTE ACTION
@@ -618,7 +1058,7 @@ class WorldMapMixin:
             self.apply_market_effect(["Defense"], 1.04, 3, f"Military op: {name}")
 
         popup.destroy()
-        self._render_map(ax, self._resource_var.get())
+        self._render_map(ax)
         canvas.draw()
 
     # =========================================================

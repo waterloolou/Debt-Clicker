@@ -122,6 +122,56 @@ ASSETS = [
         "income":  3_000_000,
         "special": "space_boost",
     },
+    {
+        "id":      "art",
+        "icon":    "🖼️",
+        "name":    "Fine Art Collection",
+        "desc":    "Picassos, Warhols, and a fake Monet. +$500K/day.",
+        "cost":    25_000_000,
+        "upkeep":  300_000,
+        "income":  500_000,
+        "special": None,
+    },
+    {
+        "id":      "crypto",
+        "icon":    "💸",
+        "name":    "Crypto Exchange",
+        "desc":    "Your own exchange. Definitely not for money laundering. +$1M/day.",
+        "cost":    30_000_000,
+        "upkeep":  400_000,
+        "income":  1_000_000,
+        "special": None,
+    },
+    {
+        "id":      "work_executive",
+        "icon":    "💼",
+        "name":    "Corporate Headhunter",
+        "desc":    "A Fortune 500 found you. Work now earns $1M–$5M per click.",
+        "cost":    1_000_000_000,
+        "upkeep":  0,
+        "income":  0,
+        "special": "work_1",
+    },
+    {
+        "id":      "work_mogul",
+        "icon":    "🏢",
+        "name":    "Boardroom Takeover",
+        "desc":    "You own the room. Work earns $20M–$80M per click. Requires Executive.",
+        "cost":    500_000_000_000,
+        "upkeep":  0,
+        "income":  0,
+        "special": "work_2",
+    },
+    {
+        "id":      "work_oligarch",
+        "icon":    "🌐",
+        "name":    "The Inner Circle",
+        "desc":    "One call moves markets. Work earns $150M–$500M per click. Requires Mogul.",
+        "cost":    1_000_000_000_000,
+        "upkeep":  0,
+        "income":  0,
+        "special": "work_3",
+    },
 ]
 
 # Quick lookup by id
@@ -220,12 +270,22 @@ class AssetsMixin:
             tk.Label(right, text="OWNED", font=("Arial", 9, "bold"),
                      bg="#1e2130", fg="#00ff90").pack()
         else:
-            btn = tk.Button(right, text="Buy",
-                            font=("Arial", 10, "bold"), bg="#ff2222", fg="white",
-                            relief="flat", padx=14, pady=5,
-                            command=lambda a=asset, w=win: self._buy_asset(a, w))
-            btn.pack()
-            self._asset_buy_btns[asset["id"]] = btn
+            # Work upgrades require the previous tier
+            prereq = {
+                "work_2": "work_executive",
+                "work_3": "work_mogul",
+            }
+            locked = asset["special"] in prereq and prereq[asset["special"]] not in self.owned_assets
+            if locked:
+                tk.Label(right, text="LOCKED", font=("Arial", 9, "bold"),
+                         bg="#1e2130", fg="#555").pack()
+            else:
+                btn = tk.Button(right, text="Buy",
+                                font=("Arial", 10, "bold"), bg="#ff2222", fg="white",
+                                relief="flat", padx=14, pady=5,
+                                command=lambda a=asset, w=win: self._buy_asset(a, w))
+                btn.pack()
+                self._asset_buy_btns[asset["id"]] = btn
 
     def _buy_asset(self, asset, win):
         if asset["id"] in self.owned_assets:
@@ -240,6 +300,12 @@ class AssetsMixin:
         self.add_happiness(max(3, min(20, asset["cost"] // 5_000_000)))
         self.update_status()
         self.log_event(f"Purchased {asset['icon']} {asset['name']} for ${asset['cost']:,}")
+
+        # Work upgrade — set work_level
+        if asset["special"] in ("work_1", "work_2", "work_3"):
+            self.work_level = int(asset["special"][-1])
+            _names = ["Worker", "Executive", "Mogul", "Oligarch"]
+            self.log_event(f"💼 Work tier upgraded to {_names[self.work_level]}!")
 
         # Apply immediate one-off market boosts for productive assets
         if asset["special"] == "energy_boost":

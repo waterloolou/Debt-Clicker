@@ -23,9 +23,10 @@ from militia_mixin import MilitiaMixin
 from tutorial_mixin import TutorialMixin
 from factory_mixin import FactoryMixin
 from save_mixin import SaveMixin
+from pleasures_mixin import PleasuresMixin
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin):
+class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin, PleasuresMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -729,8 +730,12 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         inner.bind("<Configure>", lambda e: canvas.configure(
             scrollregion=canvas.bbox("all")))
         canvas.bind("<Configure>", lambda e: canvas.itemconfig(cw, width=e.width))
-        canvas.bind_all("<MouseWheel>",
-                        lambda e: canvas.yview_scroll(-1*(e.delta//120), "units"))
+        def _alliance_scroll(e, c=canvas):
+            try:
+                c.yview_scroll(-1 * (e.delta // 120), "units")
+            except tk.TclError:
+                pass
+        canvas.bind_all("<MouseWheel>", _alliance_scroll)
 
         for ally, adata in self._ALLIANCE_DATA.items():
             color = adata["color"]

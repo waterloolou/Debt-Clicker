@@ -139,7 +139,7 @@ class FactoryMixin:
         win.title("Factory Management")
         win.configure(bg="#0e1117")
         win.geometry("620x640")
-        win.resizable(False, True)
+        win.resizable(True, True)
 
         tk.Label(win, text="🏭  FACTORIES",
                  font=("Impact", 26), bg="#0e1117", fg="#ffaa00").pack(pady=(18, 2))
@@ -154,8 +154,9 @@ class FactoryMixin:
         inner = tk.Frame(canvas, bg="#0e1117")
         inner.bind("<Configure>",
                    lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=inner, anchor="nw")
+        _win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.bind("<Configure>", lambda e, wid=_win_id: canvas.itemconfig(wid, width=e.width))
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
@@ -578,10 +579,10 @@ class FactoryMixin:
 
         # Force rival smear
         if self.rivals:
-            rival = random.choice(list(self.rivals.values()))
+            rival_name = random.choice(list(self.rivals.keys()))
             self.public_opinion = max(0, self.public_opinion - 10)
             self.log_event(
-                f"📢 {rival['name']} exploits the scandal — smear campaign. Opinion -10.")
+                f"📢 {rival_name} exploits the scandal — smear campaign. Opinion -10.")
 
         self._show_factory_event(
             ftype, "#ff44ff", "Child Labour Exposed",

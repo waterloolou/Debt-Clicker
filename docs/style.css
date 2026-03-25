@@ -344,6 +344,76 @@ section { padding: 100px 60px; }
 .sys-item strong { display: block; color: white; font-size: 15px; margin-bottom: 4px; }
 .sys-item p { color: #666; font-size: 13px; line-height: 1.5; }
 
+/* ── Changelog ────────────────────────────────────────── */
+.changelog {
+  background: var(--bg2);
+  padding: 80px 24px;
+  border-top: 1px solid #1e2130;
+}
+.changelog .section-header { margin-bottom: 40px; text-align: center; }
+.changelog-list {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.version-card {
+  background: var(--bg3);
+  border-left: 4px solid var(--red);
+  border-radius: 4px;
+  padding: 20px 24px;
+}
+.version-card.minor { border-left-color: var(--orange); }
+.version-card.patch { border-left-color: #555; }
+.version-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.version-tag {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--red);
+  color: white;
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+.version-card.minor .version-tag { background: var(--orange); color: black; }
+.version-card.patch  .version-tag { background: #333; color: #888; }
+.version-date {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+.version-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: white;
+}
+.version-changes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.version-changes li {
+  font-size: 14px;
+  color: #aaaaaa;
+  padding-left: 20px;
+  position: relative;
+}
+.version-changes li::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--muted);
+}
+
 /* ── Death screens ────────────────────────────────────── */
 .deaths {
   background: var(--bg);
