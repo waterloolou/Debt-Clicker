@@ -412,6 +412,7 @@ class ScreensMixin:
         btn_frame2.pack(pady=(0, 6))
 
         _sec_btns = [
+            ("Lobby",        self.open_lobby),
             ("Black Market", self.open_black_market),
             ("Debt",         self.open_debt_window),
             ("Rivals",       self.open_rivals_window),
@@ -420,16 +421,9 @@ class ScreensMixin:
             ("💾 Save",      self.open_save_menu),
         ]
         if getattr(self, "is_multiplayer", False):
-            _sec_btns = [
-                ("Lobby",        self.open_lobby),
-                ("Black Market", self.open_black_market),
-                ("Debt",         self.open_debt_window),
-                ("Rivals",       self.open_rivals_window),
-                ("Net Worth",    self.open_net_worth_graph),
-                ("Alliance",     self.open_alliance_window),
-                ("💬 Chat",      self.open_chat_window),
-                ("⚔️ War Room",  self.open_war_room),
-                ("💾 Save",      self.open_save_menu),
+            _sec_btns += [
+                ("💬 Chat",     self.open_chat_window),
+                ("⚔️ War Room", self.open_war_room),
             ]
         for text, cmd in _sec_btns:
             tk.Button(btn_frame2, text=text,
