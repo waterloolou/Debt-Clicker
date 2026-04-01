@@ -114,6 +114,8 @@ class LobbyMixin:
                 self.log_event("Senate Immunity active — next bad event is blocked.")
                 if btn_ref[0]:
                     btn_ref[0].config(text="USED", state="disabled", bg="#333", fg="#555")
+            if "senator" in t["id"]:
+                self.senators_bribed = getattr(self, "senators_bribed", 0) + 1
             self._update_bars()
             self.update_status()
             self.log_event(f"Lobby: {t['name']} — ${t['cost']:,} spent.")

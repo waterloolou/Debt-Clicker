@@ -187,6 +187,11 @@ class WorldMapMixin:
     # =========================================================
 
     def open_world_map(self):
+        if not getattr(self, "is_president", False):
+            self.log_event(
+                "Access denied. You must be President to use the World Map. "
+                "Win an election first via the Elections tab.")
+            return
         win = tk.Toplevel(self.root)
         win.title("World Map — Resource Operations")
         win.configure(bg=CLR_OCEAN)

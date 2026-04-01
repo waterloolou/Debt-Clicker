@@ -379,7 +379,7 @@ class ScreensMixin:
         right_top = tk.Frame(top, bg="#0e1117")
         right_top.pack(side="right")
 
-        self.day_label = tk.Label(right_top, text="Day 0",
+        self.day_label = tk.Label(right_top, text="Year 0",
                                   font=self._font_day, bg="#0e1117", fg="#aaaaaa")
         self.day_label.pack(side="right", padx=(8, 0))
 
@@ -412,13 +412,15 @@ class ScreensMixin:
         btn_frame2.pack(pady=(0, 6))
 
         _sec_btns = [
-            ("Lobby",        self.open_lobby),
-            ("Black Market", self.open_black_market),
-            ("Debt",         self.open_debt_window),
-            ("Rivals",       self.open_rivals_window),
-            ("Net Worth",    self.open_net_worth_graph),
-            ("Alliance",     self.open_alliance_window),
-            ("💾 Save",      self.open_save_menu),
+            ("Lobby",          self.open_lobby),
+            ("Black Market",   self.open_black_market),
+            ("Debt",           self.open_debt_window),
+            ("Rivals",         self.open_rivals_window),
+            ("Net Worth",      self.open_net_worth_graph),
+            ("Alliance",       self.open_alliance_window),
+            ("🗳️ Elections",   self.open_elections_window),
+            ("📜 Exec. Order", self.open_executive_order_window),
+            ("💾 Save",        self.open_save_menu),
         ]
         if getattr(self, "is_multiplayer", False):
             _sec_btns += [
@@ -627,7 +629,7 @@ class ScreensMixin:
         _, infamy_name = self.get_infamy_tier()
         self.end_name_label.config(
             text=f"{self.username}  —  \"{infamy_name}\"")
-        self.end_days_label.config(text=f"Survived {self.days} days")
+        self.end_days_label.config(text=f"Survived {self.days} years")
         self.end_infamy_label.config(
             text=f"Country: {getattr(self, 'country', '—')}  |  "
                  f"Transgressions: {self.transgressions}  |  "
@@ -807,7 +809,7 @@ class ScreensMixin:
 
     def update_status(self):
         self.money_label.config(text=f"Money: ${int(self.money):,}")
-        self.day_label.config(text=f"Day {self.days}")
+        self.day_label.config(text=f"Year {self.days}")
         self._update_bars()
 
     def _update_bars(self):

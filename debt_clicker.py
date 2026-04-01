@@ -227,6 +227,8 @@ class DebtClicker:
         self.insider_trading = False
         self.pandemic        = False
         self.market_effects  = []
+        self.public_opinion  = 50
+        self.is_president    = False
 
     # =========================================================
     # SCREEN MANAGEMENT
@@ -302,6 +304,7 @@ class DebtClicker:
     def _build_game_screen(self):
         frame = tk.Frame(self.root, bg="#0e1117")
 
+        # ── Top bar ──────────────────────────────────────────
         top = tk.Frame(frame, bg="#0e1117")
         top.pack(fill="x", padx=16, pady=(12, 4))
 
@@ -309,7 +312,7 @@ class DebtClicker:
                                     font=("Arial", 15, "bold"), bg="#0e1117", fg="#00ff90")
         self.money_label.pack(side="left")
 
-        self.day_label = tk.Label(top, text="Day 0",
+        self.day_label = tk.Label(top, text="Year 0",
                                   font=("Arial", 11), bg="#0e1117", fg="#aaaaaa")
         self.day_label.pack(side="right", padx=(0, 8))
 
@@ -318,9 +321,27 @@ class DebtClicker:
         self.clock_canvas.pack(side="right")
         self._draw_clock()
 
-        btn_frame = tk.Frame(frame, bg="#0e1117")
-        btn_frame.pack(pady=6)
+        # ── Notebook tabs ────────────────────────────────────
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure("Dark.TNotebook",
+                        background="#0e1117", borderwidth=0)
+        style.configure("Dark.TNotebook.Tab",
+                        background="#1e2130", foreground="#aaaaaa",
+                        padding=[12, 5], font=("Arial", 10))
+        style.map("Dark.TNotebook.Tab",
+                  background=[("selected", "#2e3a55")],
+                  foreground=[("selected", "white")])
 
+        notebook = ttk.Notebook(frame, style="Dark.TNotebook")
+        notebook.pack(fill="both", expand=True, padx=8, pady=(4, 8))
+
+        # ── Tab 1: Empire (main) ─────────────────────────────
+        empire_tab = tk.Frame(notebook, bg="#0e1117")
+        notebook.add(empire_tab, text="  Empire  ")
+
+        btn_frame = tk.Frame(empire_tab, bg="#0e1117")
+        btn_frame.pack(pady=6)
         for text, cmd in [
             ("Work",         self.work),
             ("Casino",       self.open_casino),
@@ -332,13 +353,218 @@ class DebtClicker:
                       padx=14, pady=5,
                       command=cmd).pack(side="left", padx=6)
 
-        self.log = scrolledtext.ScrolledText(frame, height=28, state="disabled",
+        self.log = scrolledtext.ScrolledText(empire_tab, height=28, state="disabled",
                                              bg="#0a0d13", fg="#cccccc",
                                              font=("Consolas", 9), relief="flat",
                                              insertbackground="white")
-        self.log.pack(fill="both", expand=True, padx=10, pady=(4, 10))
+        self.log.pack(fill="both", expand=True, padx=6, pady=(2, 8))
+
+        # ── Tab 2: World Map ─────────────────────────────────
+        self.world_tab = tk.Frame(notebook, bg="#0e1117")
+        notebook.add(self.world_tab, text="  World Map  ")
+        self._build_world_map_tab()
+
+        # ── Tab 3: Presidential Elections ────────────────────
+        election_tab = tk.Frame(notebook, bg="#0e1117")
+        notebook.add(election_tab, text="  Presidential Elections  ")
+        self._build_election_tab(election_tab)
 
         return frame
+
+    # ─────────────────────────────────────────────────────────
+    # WORLD MAP TAB
+    # ─────────────────────────────────────────────────────────
+
+    BOMB_TARGETS = [
+        {"name": "Venezuela",   "cost":  80_000_000, "reward":  200_000_000, "resource": "Oil"},
+        {"name": "Congo",       "cost":  60_000_000, "reward":  150_000_000, "resource": "Minerals"},
+        {"name": "Afghanistan", "cost":  50_000_000, "reward":  120_000_000, "resource": "Minerals"},
+        {"name": "Libya",       "cost":  70_000_000, "reward":  180_000_000, "resource": "Oil"},
+        {"name": "Iraq",        "cost": 100_000_000, "reward":  260_000_000, "resource": "Oil"},
+        {"name": "Sudan",       "cost":  40_000_000, "reward":   90_000_000, "resource": "Agriculture"},
+        {"name": "Myanmar",     "cost":  55_000_000, "reward":  130_000_000, "resource": "Minerals"},
+        {"name": "North Korea", "cost": 200_000_000, "reward":  600_000_000, "resource": "Technology"},
+        {"name": "Iran",        "cost": 150_000_000, "reward":  400_000_000, "resource": "Oil"},
+    ]
+
+    def _build_world_map_tab(self):
+        for w in self.world_tab.winfo_children():
+            w.destroy()
+
+        if not self.is_president:
+            tk.Label(self.world_tab, text="🔒",
+                     font=("Arial", 48), bg="#0e1117", fg="#444444").pack(pady=(60, 8))
+            tk.Label(self.world_tab,
+                     text="World Map is locked.\nWin a Presidential Election to unlock bombing operations.",
+                     font=("Arial", 11), bg="#0e1117", fg="#666666",
+                     justify="center").pack()
+            return
+
+        tk.Label(self.world_tab, text="💣 Bombing Operations",
+                 font=("Arial", 13, "bold"), bg="#0e1117", fg="#ff4444").pack(pady=(12, 2))
+        tk.Label(self.world_tab,
+                 text="As President, you can bomb countries for their resources.\nEach bombing reduces your public opinion.",
+                 font=("Arial", 9), bg="#0e1117", fg="#888888", justify="center").pack(pady=(0, 8))
+
+        self.bomb_result_label = tk.Label(self.world_tab, text="",
+                                          font=("Arial", 10, "bold"), bg="#0e1117", fg="#ffdd44",
+                                          wraplength=460, justify="center")
+        self.bomb_result_label.pack(pady=(0, 4))
+
+        canvas = tk.Canvas(self.world_tab, bg="#0e1117", highlightthickness=0)
+        scrollbar = tk.Scrollbar(self.world_tab, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg="#0e1117")
+        scroll_frame.bind("<Configure>", lambda _: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True, padx=(6, 0))
+        scrollbar.pack(side="right", fill="y")
+
+        for t in self.BOMB_TARGETS:
+            row = tk.Frame(scroll_frame, bg="#1e2130", pady=6, padx=10)
+            row.pack(fill="x", pady=3, padx=6)
+
+            tk.Label(row, text=t["name"], font=("Arial", 11, "bold"),
+                     bg="#1e2130", fg="white", width=14, anchor="w").pack(side="left")
+            tk.Label(row, text=t["resource"], font=("Arial", 9),
+                     bg="#1e2130", fg="#aaaaaa", width=10, anchor="w").pack(side="left")
+            tk.Label(row, text=f"Cost: ${t['cost']:,}", font=("Arial", 9),
+                     bg="#1e2130", fg="#ff6644", width=18, anchor="w").pack(side="left")
+            tk.Label(row, text=f"~Reward: ${t['reward']:,}", font=("Arial", 9),
+                     bg="#1e2130", fg="#00ff90", width=20, anchor="w").pack(side="left")
+
+            btn = tk.Button(row, text="Bomb", font=("Arial", 9, "bold"),
+                            bg="#ff2222", fg="white", relief="flat", padx=10, pady=2)
+            btn.config(command=lambda t=t, b=btn: self._do_bomb(t, b))
+            btn.pack(side="right", padx=4)
+
+    def _do_bomb(self, target, btn):
+        if self.money < target["cost"]:
+            self.bomb_result_label.config(
+                text=f"Not enough money to bomb {target['name']}!", fg="#ff4444")
+            return
+        self.money -= target["cost"]
+        reward = int(target["reward"] * random.uniform(0.8, 1.2))
+        self.money += reward
+        self.market.money = self.money
+        self.public_opinion = max(0, self.public_opinion - 15)
+        self.update_status()
+        profit = reward - target["cost"]
+        self.log_event(f"[BOMBING] Bombed {target['name']} for {target['resource']}. Profit: ${profit:,}. Public opinion: {self.public_opinion}")
+        self.apply_market_effect(["Defense"], 1.08, 3, f"Bombing {target['name']}")
+        self.apply_market_effect(["Energy"], 0.93, 2, "War zone instability")
+        self.bomb_result_label.config(
+            text=f"Bombed {target['name']}! Gained ${reward:,} in {target['resource']} resources. Public opinion: {self.public_opinion}.",
+            fg="#ffdd44")
+        btn.config(state="disabled", text="Bombed")
+
+    # ─────────────────────────────────────────────────────────
+    # PRESIDENTIAL ELECTIONS TAB
+    # ─────────────────────────────────────────────────────────
+
+    def _build_election_tab(self, parent):
+        REQUIRED      = 500_000_000
+        CAMPAIGN_COST = 200_000_000
+        BRIBE_COST    = 100_000_000
+
+        self._election_parent = parent
+        self._election_bribe_var = tk.BooleanVar(value=False)
+
+        tk.Label(parent, text="🏛 Presidential Elections",
+                 font=("Arial", 14, "bold"), bg="#0e1117", fg="#4488ff").pack(pady=(18, 4))
+
+        self.election_status_label = tk.Label(parent, text="",
+                                              font=("Arial", 11), bg="#0e1117", fg="#aaaaaa")
+        self.election_status_label.pack(pady=4)
+
+        info_text = (
+            f"Campaign cost:  ${CAMPAIGN_COST:,}\n"
+            f"Bribe officials: ${BRIBE_COST:,}  (+20% win chance)\n"
+            f"Minimum wealth required: ${REQUIRED:,}"
+        )
+        tk.Label(parent, text=info_text,
+                 font=("Arial", 10), bg="#0e1117", fg="#cccccc", justify="center").pack(pady=8)
+
+        self.election_opinion_label = tk.Label(parent, text="Public opinion: 50 / 100",
+                                               font=("Arial", 10), bg="#0e1117", fg="#aaaaaa")
+        self.election_opinion_label.pack()
+
+        self.election_chance_label = tk.Label(parent, text="Win chance: 40%",
+                                              font=("Arial", 10, "bold"), bg="#0e1117", fg="#ffdd44")
+        self.election_chance_label.pack(pady=(2, 8))
+
+        tk.Checkbutton(parent,
+                       text=f"Bribe officials (+20% win chance)  —  costs ${BRIBE_COST:,}",
+                       variable=self._election_bribe_var,
+                       bg="#0e1117", fg="#ffdd44", selectcolor="#0e1117",
+                       activebackground="#0e1117", font=("Arial", 9),
+                       command=self._refresh_election_ui).pack()
+
+        self.election_result_label = tk.Label(parent, text="",
+                                              font=("Arial", 11, "bold"), bg="#0e1117",
+                                              fg="#00ff90", wraplength=420, justify="center")
+        self.election_result_label.pack(pady=10)
+
+        self.run_election_btn = tk.Button(parent, text="Run for President",
+                                          font=("Arial", 11, "bold"), bg="#1e3a6e", fg="white",
+                                          activebackground="#2e4a7e", relief="flat",
+                                          padx=24, pady=8,
+                                          command=lambda: self._run_election(REQUIRED, CAMPAIGN_COST, BRIBE_COST))
+        self.run_election_btn.pack(pady=6)
+
+        self._refresh_election_ui()
+
+    def _refresh_election_ui(self):
+        if not hasattr(self, "election_opinion_label"):
+            return
+        bribe = self._election_bribe_var.get()
+        chance = min(90, int(self.public_opinion * 0.6 + 10) + (20 if bribe else 0))
+        self.election_opinion_label.config(text=f"Public opinion: {self.public_opinion} / 100")
+        self.election_chance_label.config(text=f"Win chance: {chance}%")
+        if self.is_president:
+            self.election_status_label.config(text="★ You are the sitting President.", fg="#00ff90")
+            self.run_election_btn.config(state="disabled")
+        else:
+            self.election_status_label.config(text="You have not won an election yet.", fg="#aaaaaa")
+            self.run_election_btn.config(state="normal")
+
+    def _run_election(self, required, campaign_cost, bribe_cost):
+        if self.is_president:
+            return
+        if self.money < required:
+            self.election_result_label.config(
+                text=f"You need ${required:,} to run. Current: ${int(self.money):,}", fg="#ff4444")
+            return
+        bribe = self._election_bribe_var.get()
+        total = campaign_cost + (bribe_cost if bribe else 0)
+        if self.money < total:
+            self.election_result_label.config(text="Not enough money for campaign costs.", fg="#ff4444")
+            return
+
+        self.money -= total
+        self.market.money = self.money
+        self.update_status()
+
+        chance = min(90, int(self.public_opinion * 0.6 + 10) + (20 if bribe else 0))
+        won = random.randint(1, 100) <= chance
+
+        if won:
+            self.is_president = True
+            self.public_opinion = min(100, self.public_opinion + 10)
+            self._build_world_map_tab()
+            self.election_result_label.config(
+                text=f"YOU WON THE ELECTION! ({chance}% chance)\nWorld Map & bombing operations are now unlocked.",
+                fg="#00ff90")
+            self.log_event("[PRESIDENT] You won the election! World Map unlocked.")
+            self.apply_market_effect(["Defense", "Finance"], 1.06, 4, "Presidential election victory")
+        else:
+            self.public_opinion = max(0, self.public_opinion - 10)
+            self.election_result_label.config(
+                text=f"You lost the election. ({chance}% chance)\nPublic opinion dropped to {self.public_opinion}.",
+                fg="#ff4444")
+            self.log_event(f"[PRESIDENT] Lost the election. Spent ${total:,}. Public opinion: {self.public_opinion}")
+
+        self._refresh_election_ui()
 
     # =========================================================
     # END SCREEN
@@ -383,7 +609,7 @@ class DebtClicker:
     def _show_end_screen(self):
         rank, total = self._save_score()
         self.end_name_label.config(text=f"{self.username}'s empire has fallen.")
-        self.end_days_label.config(text=f"Survived {self.days} days")
+        self.end_days_label.config(text=f"Survived {self.days} years")
         if rank:
             self.end_rank_label.config(text=f"#{rank} on the leaderboard out of {total} players")
         else:
@@ -467,7 +693,7 @@ class DebtClicker:
                      font=("Arial", 12), bg="#1e2130", fg="white",
                      width=20, anchor="w").pack(side="left")
 
-            tk.Label(row, text=f"{entry['days']} days",
+            tk.Label(row, text=f"{entry['days']} years",
                      font=("Arial", 12, "bold"), bg="#1e2130", fg="#00ff90").pack(side="right", padx=16)
 
     # =========================================================
@@ -507,7 +733,7 @@ class DebtClicker:
 
     def update_status(self):
         self.money_label.config(text=f"Money: ${int(self.money):,}")
-        self.day_label.config(text=f"Day {self.days}")
+        self.day_label.config(text=f"Year {self.days}")
 
     # =========================================================
     # GAME START

@@ -24,9 +24,10 @@ from tutorial_mixin import TutorialMixin
 from factory_mixin import FactoryMixin
 from save_mixin import SaveMixin
 from pleasures_mixin import PleasuresMixin
+from elections_mixin import ElectionsMixin
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin, PleasuresMixin):
+class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin, PleasuresMixin, ElectionsMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -174,6 +175,14 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.rival_retaliation_boost = 0   # days remaining of doubled rival attack rate
         self.casino_visited     = False
         self.child_labor_scandal_used = False   # one-time major scandal flag
+        self.loan_defaults      = 0
+        self.loans_repaid       = 0
+        self.bank_blacklist     = set()
+        self.is_president       = False
+        self.presidential_term  = 0
+        self.years_in_office    = 0
+        self.senators_bribed    = 0
+        self.executive_orders   = []
 
     # =========================================================
     # GAME START
@@ -303,6 +312,8 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.check_factory_events()
         self.check_epstein_caught()
         self._tick_bm_cooldowns()
+        self.process_presidential_term()
+        self.apply_executive_order_effects()
         self.check_critical_stats()
         if not self.running:
             return
