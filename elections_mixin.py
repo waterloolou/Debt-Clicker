@@ -146,18 +146,91 @@ _QUAL_MAGNITUDES = [
 ]
 
 
+def _parse_executive_order_gemini(text):
+    """
+    Gemini-powered executive order parser.
+    Returns {"approved": bool, "reason": str, "effect": {...} or None}
+    Falls back to the rule-based parser if the API key is missing or the
+    call fails for any reason.
+    """
+    import os
+    import urllib.request
+
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return None   # signal to caller: fall back to rule-based
+
+    effect_types = "\n".join(
+        f'  - "{k}": allowed value range {lo}–{hi}'
+        for k, (lo, hi) in _EFFECT_RANGES.items()
+    )
+
+    prompt = (
+        "You are the Supreme Court of a fictional nation in a game called Debt Clicker.\n"
+        "A player who is President has submitted this executive order:\n\n"
+        f'"{text}"\n\n'
+        "Evaluate it and respond with ONLY a JSON object — no markdown, no explanation — in this exact shape:\n"
+        '{"approved": true/false, "reason": "<1-2 sentences>", '
+        '"effect": {"type": "<type>", "value": <number>, "description": "<short label>"} or null}\n\n'
+        "Available effect types and their allowed numeric ranges:\n"
+        f"{effect_types}\n\n"
+        "Rules:\n"
+        "- Deny anything that would give an infinite, game-breaking, or unrealistic advantage.\n"
+        "- Pick the single effect type that best matches the order's intent.\n"
+        "- Scale the value to the magnitude described (e.g. 'slightly' → near the low end).\n"
+        "- Keep the description label short (e.g. '20% income boost').\n"
+        "- If the order is nonsensical or impossible to map, set approved to false and effect to null."
+    )
+
+    payload = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 256},
+    }).encode()
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={api_key}"
+    )
+    req = urllib.request.Request(
+        url, data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        body = json.loads(resp.read().decode())
+
+    raw = body["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    # Strip markdown code fences if Gemini wraps the JSON anyway
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    return json.loads(raw)
+
+
 def _parse_executive_order(text):
     """
-    Local rule-based executive order parser.
-    Returns the same dict structure as the former Claude API call:
-      {"approved": bool, "reason": str, "effect": {...} or None}
-    No internet connection or API key required.
+    Executive order parser.
+    Tries Gemini first; falls back to the local rule-based parser if
+    GEMINI_API_KEY is not set or the API call fails.
+    Returns {"approved": bool, "reason": str, "effect": {...} or None}
     """
+    try:
+        result = _parse_executive_order_gemini(text)
+        if result is not None:
+            return result
+    except Exception:
+        pass   # fall through to rule-based
+
+    # ── Rule-based fallback ───────────────────────────────────────────
     import re
 
     lower = text.lower()
 
-    # ── 1. Automatic rejection ────────────────────────────────────────
     for bad in _REJECT_WORDS:
         if bad in lower:
             return {
@@ -167,7 +240,6 @@ def _parse_executive_order(text):
                 "effect": None,
             }
 
-    # ── 2. Score each rule by keyword density ─────────────────────────
     best_rule  = None
     best_score = 0
 
@@ -188,7 +260,6 @@ def _parse_executive_order(text):
             "effect": None,
         }
 
-    # ── 3. Extract magnitude ──────────────────────────────────────────
     pct = None
 
     m = re.search(r'(\d+(?:\.\d+)?)\s*%', text)
@@ -204,9 +275,8 @@ def _parse_executive_order(text):
     if pct is None:
         pct = float(best_rule["default_pct"])
 
-    pct = max(1.0, min(pct, 200.0))   # clamp to sane input range
+    pct = max(1.0, min(pct, 200.0))
 
-    # ── 4. Convert magnitude → effect value ───────────────────────────
     lo, hi = best_rule["range"]
 
     if best_rule.get("integer"):
@@ -217,7 +287,6 @@ def _parse_executive_order(text):
     else:
         val = max(lo, min(hi, round(1.0 + pct / 100.0, 3)))
 
-    # ── 5. Build human-readable description ───────────────────────────
     desc = best_rule["desc_tmpl"].format(pct=pct, val=val)
 
     return {
