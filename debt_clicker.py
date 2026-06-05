@@ -8,6 +8,8 @@ import math
 import matplotlib.pyplot as plt
 import yfinance as yf
 
+from messages_mixin import MessagesMixin
+
 LEADERBOARD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "leaderboard.json")
 
 # -----------------------------
@@ -176,7 +178,7 @@ class StockMarket:
 # MAIN GAME
 # -----------------------------
 
-class DebtClicker:
+class DebtClicker(MessagesMixin):
 
     def __init__(self, root):
 
@@ -237,6 +239,12 @@ class DebtClicker:
         self.groq_propaganda_days = 0
         self.groq_emergency_days = 0
         self.groq_censorship_days = 0
+        # Inbox + activity tracking
+        self.inbox = []
+        self.transgressions = 0
+        self.casino_visits = 0
+        self.stock_trades = 0
+        self.revolution_triggered = False
 
     # =========================================================
     # SCREEN MANAGEMENT
@@ -329,6 +337,9 @@ class DebtClicker:
         self.day_label = tk.Label(top, text="Year 0",
                                   font=("Arial", 11), bg="#0e1117", fg="#aaaaaa")
         self.day_label.pack(side="right", padx=(0, 8))
+
+        inbox_container = self._build_inbox_button(top)
+        inbox_container.pack(side="right", padx=(0, 6))
 
         self.clock_canvas = tk.Canvas(top, width=60, height=60,
                                       bg="#0e1117", highlightthickness=0)
@@ -961,6 +972,7 @@ class DebtClicker:
             return
         self.days += 1
         self.lose_money()
+        self.check_revolution()
         self.random_events()
         self.update_stock_prices()
         if self.money <= 0:
@@ -997,189 +1009,283 @@ class DebtClicker:
         if r == 1 and self.family:
             self.family = False
             self.money /= 2
-            self.show_event("Gold Digger!", "Oh no! Your spouse is a gold-digger and has taken HALF your money!")
+            self.show_event("Gold Digger!", "Oh no! Your spouse is a gold-digger and has taken HALF your money!", "scandal")
             self.apply_market_effect(["Finance"], 0.93, 3, "Divorce scandal")
 
         elif r == 2:
-            self.money *= 0.30
-            self.show_event("Tax Fraud!", "You filed a fraudulent tax report. The IRS found out — lose 70% of your money!")
+            if "offshore" in getattr(self, "owned_assets", set()):
+                self.money *= 0.65
+                self.show_event("Tax Fraud!", "You filed a fraudulent tax report. The IRS found out — offshore accounts shielded half the damage. Lose 35%.", "legal")
+            else:
+                self.money *= 0.30
+                self.show_event("Tax Fraud!", "You filed a fraudulent tax report. The IRS found out — lose 70% of your money!", "legal")
             self.apply_market_effect(["Finance"], 0.91, 2, "Tax fraud scandal")
+            self.add_transgression(10)
 
         elif r == 3 and self.company:
             self.money -= 50000
-            self.show_event("Factory Incident!", "One of your child workers at your illegal factory got mutilated by machinery. Pay $50,000 to cover it up.")
+            self.show_event("Factory Incident!", "One of your child workers at your illegal factory got mutilated by machinery. Pay $50,000 to cover it up.", "legal")
             self.apply_market_effect(["Retail", "Automotive"], 0.94, 2, "Factory scandal")
+            self.add_transgression(8)
 
         elif r == 4 and self.rich_relative:
             self.rich_relative = False
             self.money += 1000000
-            self.show_event("Inheritance!", "Your Grandma died! She left you $1,000,000. RIP.")
+            self.show_event("Inheritance!", "Your Grandma died! She left you $1,000,000. RIP.", "personal")
 
         elif r == 5:
             for name in self.market.stocks:
                 self.market.stocks[name]["shares"] = 0
-            self.show_event("Betrayal!", "Your financial advisor betrayed you and liquidated ALL of your stock shares!")
+            self.show_event("Betrayal!", "Your financial advisor betrayed you and liquidated ALL of your stock shares!", "financial")
             self.apply_market_effect(["Finance"], 0.92, 3, "Advisor betrayal")
 
         elif r == 6:
             if random.randint(1, 5) == 1:
                 self.money += 100000
-                self.show_event("Lucky Hacker!", "Someone stole your credit ID and went gambling — and WON. They sent you $100,000 out of guilt.")
+                self.show_event("Lucky Hacker!", "Someone stole your credit ID and went gambling — and WON. They sent you $100,000 out of guilt.", "financial")
             else:
                 self.money -= 500000
-                self.show_event("Identity Theft!", "Someone stole your credit ID and went gambling. You lost $500,000.")
+                self.show_event("Identity Theft!", "Someone stole your credit ID and went gambling. You lost $500,000.", "financial")
             self.apply_market_effect(["Finance", "Technology"], 0.94, 2, "Identity theft")
 
         elif r == 7 and not self.epstein:
             self.epstein = True
             self.money -= 10000000
-            self.show_event("Island Discovered...", "Your ventures to Epstein's island have been discovered. Lose $10,000,000 to cover it up.")
+            self.show_event("Island Discovered...", "Your ventures to Epstein's island have been discovered. Lose $10,000,000 to cover it up.", "scandal")
             self.apply_market_effect(["Entertainment", "Finance"], 0.88, 4, "Epstein scandal")
+            self.add_transgression(20)
 
         elif r == 8:
             self.money -= 5000000
-            self.show_event("JFK Investigation!", "You are under investigation for the assassination of JFK. Your assets are temporarily frozen — lose $5,000,000.")
+            self.show_event("JFK Investigation!", "You are under investigation for the assassination of JFK. Your assets are temporarily frozen — lose $5,000,000.", "legal")
             self.apply_market_effect(["Defense"], 0.91, 3, "Government investigation")
+            self.add_transgression(7)
 
         elif r == 9 and self.pet:
             self.pet = False
             self.money -= 1000
-            self.show_event("Pet Incident...", "Your pet wandered into the oven. Your uneducated servant unknowingly turned it on. Something smells burnt... (pet is gone)")
+            self.show_event("Pet Incident...", "Your pet wandered into the oven. Your uneducated servant unknowingly turned it on. Something smells burnt... (pet is gone)", "personal")
 
         elif r == 10:
             self.money += 2000000
-            self.show_event("Diamond in the Rough!", "You accidentally put a pencil in a pressure cooker and it turned into a diamond! A diamond also went missing from the Louvre... +$2,000,000")
+            self.show_event("Diamond in the Rough!", "You accidentally put a pencil in a pressure cooker and it turned into a diamond! A diamond also went missing from the Louvre... +$2,000,000", "financial")
 
         elif r == 11 and self.family:
             self.money -= 1000000
-            self.show_event("Blender Incident!", "Your child accidentally stuck their entire arm into a running blender. Pay $1,000,000 in healthcare bills.")
+            self.show_event("Blender Incident!", "Your child accidentally stuck their entire arm into a running blender. Pay $1,000,000 in healthcare bills.", "health")
             self.apply_market_effect(["Healthcare"], 1.04, 2, "Medical lawsuit windfall")
-
-        elif r == 12 and self.revolution:
-            self.apply_market_effect(["ALL"], 0.85, 5, "Socialist revolution")
-            self.show_revolution_event()
-            return
 
         elif r == 13 and self.company:
             self.company = False
             self.money -= 1000000
-            self.show_event("Factory Shutdown!", "All your foreign investments in underage factory workers are exposed. Workers freed — you pay $1,000,000 in damages.")
+            self.show_event("Factory Shutdown!", "All your foreign investments in underage factory workers are exposed. Workers freed — you pay $1,000,000 in damages.", "legal")
             self.apply_market_effect(["Retail", "Automotive"], 0.92, 3, "Factory shutdown")
+            self.add_transgression(10)
 
         elif r == 14 and self.mansion:
             self.mansion = False
-            self.show_event("Cuba Invades!", "The island your private mansion sits on was just invaded by Cuba. You lost your mansion.")
+            self.show_event("Cuba Invades!", "The island your private mansion sits on was just invaded by Cuba. You lost your mansion.", "event")
             self.apply_market_effect(["Defense"], 1.06, 3, "Geopolitical tension")
             self.apply_market_effect(["Space"], 0.93, 2, "Airspace conflict")
 
         elif r == 15 and not self.subscription:
             self.subscription = True
-            self.show_event("NYT Subscription!", "You accidentally subscribed to the New York Times. You now lose $1 every second. Cancel? They don't have a cancel button.")
+            self.show_event("NYT Subscription!", "You accidentally subscribed to the New York Times. You now lose $1 every second. Cancel? They don't have a cancel button.", "financial")
             self.apply_market_effect(["Entertainment"], 0.96, 1, "Media disruption")
             self.subscription_tick()
 
         elif r == 16:
             self.money -= 10000000
-            self.show_event("Weapons Deal", "You are funding a genocide. Pay $10,000,000 in weapons and supplies.")
+            self.show_event("Weapons Deal", "You are funding a genocide. Pay $10,000,000 in weapons and supplies.", "legal")
             self.apply_market_effect(["Defense"], 1.08, 3, "Weapons demand surge")
             self.apply_market_effect(["Energy"], 0.91, 4, "War zone instability")
+            self.add_transgression(18)
 
         elif r == 17 and not self.space:
             self.space = True
             self.money -= 500000000
-            self.show_event("Space Program Disaster!", "You created a space program. On the first launch, the rocket explodes and kills everyone on board. Pay $500,000,000 in damages.")
+            self.show_event("Space Program Disaster!", "You created a space program. On the first launch, the rocket explodes and kills everyone on board. Pay $500,000,000 in damages.", "event")
             self.apply_market_effect(["Space"], 0.75, 5, "Space disaster")
             self.apply_market_effect(["Technology", "Defense"], 0.93, 3, "Space sector contagion")
 
         elif r == 18:
             self.money += 5000000
-            self.show_event("Political Endorsement!", "You 'accidentally' did the salute of a hated Austrian politician in public. The president loved it and hired you into the government. +$5,000,000")
+            self.show_event("Political Endorsement!", "You 'accidentally' did the salute of a hated Austrian politician in public. The president loved it and hired you into the government. +$5,000,000", "election")
             self.apply_market_effect(["Finance", "Defense"], 1.05, 2, "Government contracts")
 
         elif r == 19:
             self.money -= 10000000
-            self.show_event("Lawsuit Fail!", "You sued a local news outlet for talking badly about you — but forgot about free speech. Lose $10,000,000.")
+            self.show_event("Lawsuit Fail!", "You sued a local news outlet for talking badly about you — but forgot about free speech. Lose $10,000,000.", "legal")
             self.apply_market_effect(["Entertainment"], 0.94, 2, "Media coverage backlash")
 
         elif r == 20 and not self.ponzi:
             self.ponzi = True
             self.money -= 20000000
-            self.show_event("Ponzi Scheme Exposed!", "Your side Ponzi scheme was discovered by the SEC. 2,000 retirees lost their savings. You lost $20,000,000 in fines.")
+            self.show_event("Ponzi Scheme Exposed!", "Your side Ponzi scheme was discovered by the SEC. 2,000 retirees lost their savings. You lost $20,000,000 in fines.", "financial")
             self.apply_market_effect(["Finance"], 0.90, 4, "Ponzi scheme collapse")
+            self.add_transgression(15)
 
         elif r == 21 and not self.oil_spill:
             self.oil_spill = True
             self.money -= 50000000
-            self.show_event("Oil Spill!", "Your private tanker had a 'minor' accident off the coast. The ocean is now 40% oil. Pay $50,000,000 in cleanup costs.")
+            self.show_event("Oil Spill!", "Your private tanker had a 'minor' accident off the coast. The ocean is now 40% oil. Pay $50,000,000 in cleanup costs.", "environment")
             self.apply_market_effect(["Energy"], 0.88, 5, "Oil spill disaster")
+            self.add_transgression(12)
 
         elif r == 22:
             self.money -= 10000000
-            self.show_event("Crypto Rug Pull!", "You launched 'RichCoin' and immediately rug pulled it. Unfortunately you forgot you also invested $10,000,000 in it. Classic.")
+            self.show_event("Crypto Rug Pull!", "You launched 'RichCoin' and immediately rug pulled it. Unfortunately you forgot you also invested $10,000,000 in it. Classic.", "financial")
             self.apply_market_effect(["Finance", "AI"], 0.93, 2, "Crypto collapse")
+            self.add_transgression(6)
 
         elif r == 23:
             self.money -= 8000000
-            self.show_event("Social Media Disaster!", "You accidentally tweeted your offshore bank account password. $8,000,000 vanished within minutes. The tweet got 2 million likes.")
+            self.show_event("Social Media Disaster!", "You accidentally tweeted your offshore bank account password. $8,000,000 vanished within minutes. The tweet got 2 million likes.", "scandal")
             self.apply_market_effect(["Finance", "Technology"], 0.94, 2, "Data breach panic")
 
         elif r == 24:
             self.money -= 12000000
-            self.show_event("Art Forgery!", "You sold fake Picassos to a Russian oligarch. He found out and sent some very polite gentlemen to collect. Lose $12,000,000.")
+            self.show_event("Art Forgery!", "You sold fake Picassos to a Russian oligarch. He found out and sent some very polite gentlemen to collect. Lose $12,000,000.", "legal")
             self.apply_market_effect(["Entertainment"], 0.92, 3, "Art fraud scandal")
+            self.add_transgression(6)
 
         elif r == 25 and not self.carbon:
             self.carbon = True
             self.money -= 30000000
-            self.show_event("Carbon Credits Scam!", "You sold fake carbon credits to 47 Fortune 500 companies. The EPA found out. Lose $30,000,000. The planet is still dying.")
+            self.show_event("Carbon Credits Scam!", "You sold fake carbon credits to 47 Fortune 500 companies. The EPA found out. Lose $30,000,000. The planet is still dying.", "environment")
             self.apply_market_effect(["Energy"], 0.91, 4, "Environmental fraud")
+            self.add_transgression(10)
 
         elif r == 26 and not self.insider_trading:
             self.insider_trading = True
             self.money -= 35000000
-            self.show_event("Insider Trading!", "You got caught insider trading NVIDIA stock right before earnings. The SEC fined you $35,000,000. Worth it honestly.")
+            self.show_event("Insider Trading!", "You got caught insider trading NVIDIA stock right before earnings. The SEC fined you $35,000,000. Worth it honestly.", "stocks")
             self.apply_market_effect(["AI", "Finance"], 0.89, 4, "Insider trading scandal")
+            self.add_transgression(12)
 
         elif r == 27:
             self.money -= 15000000
-            self.show_event("Hitman Mishap!", "You hired a hitman to deal with a business rival. He was an undercover FBI agent. Pay $15,000,000 in legal fees. Your rival is fine.")
+            self.show_event("Hitman Mishap!", "You hired a hitman to deal with a business rival. He was an undercover FBI agent. Pay $15,000,000 in legal fees. Your rival is fine.", "legal")
             self.apply_market_effect(["Defense"], 0.93, 2, "Criminal investigation")
-
-        elif r == 28:
-            self.money -= 20000000
-            self.show_event("Casino Money Laundering!", "You used a casino to launder money. Casinos report large cash transactions. The IRS called. Lose $20,000,000.")
-            self.apply_market_effect(["Finance", "Entertainment"], 0.91, 3, "Money laundering probe")
+            self.add_transgression(15)
 
         elif r == 29:
             self.money -= 10000000
-            self.show_event("Lobbyist Caught!", "Your lobbyist was filmed handing a suitcase of cash to a senator in broad daylight. Lose $10,000,000. The senator kept the money.")
+            self.show_event("Lobbyist Caught!", "Your lobbyist was filmed handing a suitcase of cash to a senator in broad daylight. Lose $10,000,000. The senator kept the money.", "legal")
             self.apply_market_effect(["Finance", "Defense"], 0.93, 2, "Political corruption scandal")
+            self.add_transgression(8)
 
         elif r == 30:
             self.money -= 5000000
-            self.show_event("Drunk Pilot!", "Your personal pilot landed your private jet on a busy highway after one too many in-flight drinks. Pay $5,000,000 in damages.")
+            self.show_event("Drunk Pilot!", "Your personal pilot landed your private jet on a busy highway after one too many in-flight drinks. Pay $5,000,000 in damages.", "event")
 
         elif r == 31:
             self.money -= 25000000
-            self.show_event("Hostile Takeover Attempt!", "A larger corporation tried a hostile takeover of your assets. You survived, but spent $25,000,000 in legal defense. They'll be back.")
+            self.show_event("Hostile Takeover Attempt!", "A larger corporation tried a hostile takeover of your assets. You survived, but spent $25,000,000 in legal defense. They'll be back.", "financial")
             self.apply_market_effect(["Finance"], 1.04, 2, "M&A activity surge")
 
         elif r == 32:
             self.money -= 7000000
-            self.show_event("Bribed the Wrong Judge!", "You bribed a judge but got the wrong courtroom. You needed room 2B, not 2A. Lose $7,000,000. The case is still ongoing.")
+            self.show_event("Bribed the Wrong Judge!", "You bribed a judge but got the wrong courtroom. You needed room 2B, not 2A. Lose $7,000,000. The case is still ongoing.", "legal")
             self.apply_market_effect(["Finance"], 0.96, 1, "Legal uncertainty")
+            self.add_transgression(5)
 
         elif r == 33:
             self.money -= 15000000
-            self.show_event("Climate Lawsuit!", "You lobbied against climate regulations for 20 years. 47 Pacific island nations just sued you. Lose $15,000,000. Oops.")
+            self.show_event("Climate Lawsuit!", "You lobbied against climate regulations for 20 years. 47 Pacific island nations just sued you. Lose $15,000,000. Oops.", "environment")
             self.apply_market_effect(["Energy"], 0.92, 3, "Climate litigation")
             self.apply_market_effect(["Retail"], 0.96, 2, "Consumer backlash")
+            self.add_transgression(10)
 
         elif r == 34 and not self.pandemic:
             self.pandemic = True
             self.money *= 0.60
-            self.show_event("Pandemic Investment!", "You invested your entire liquid assets into a company selling horse dewormer as a COVID cure. Lose 40% of your money. No refunds.")
+            self.show_event("Pandemic Investment!", "You invested your entire liquid assets into a company selling horse dewormer as a COVID cure. Lose 40% of your money. No refunds.", "health")
             self.apply_market_effect(["Healthcare"], 0.88, 3, "Medical misinformation")
+
+        # ── Gambling events — only fire if player has visited the casino ──────
+
+        elif r == 35 and self.casino_visits > 0:
+            debt = random.randint(5_000_000, 12_000_000)
+            self.money -= debt
+            self.show_event("Gambling Debt!", f"A bad night at the poker table left you owing ${debt:,} to some very intimidating people. They sent a representative.", "gambling")
+            self.apply_market_effect(["Finance", "Entertainment"], 0.95, 2, "Gambling scandal")
+            self.add_transgression(8)
+
+        elif r == 36 and self.casino_visits > 0:
+            self.money -= 20_000_000
+            self.show_event("Casino Money Laundering!", "You used a casino to launder money. Casinos report large cash transactions. The IRS called. Lose $20,000,000.", "gambling")
+            self.apply_market_effect(["Finance", "Entertainment"], 0.91, 3, "Money laundering probe")
+            self.add_transgression(10)
+
+        elif r == 37 and self.casino_visits > 0:
+            self.money -= 6_000_000
+            self.show_event("Unreported Winnings!", "The IRS noticed you won big at the casino but never reported it. Backdated tax bill: $6,000,000. Plus penalties. Always the penalties.", "gambling")
+            self.add_transgression(6)
+
+        elif r == 38 and self.casino_visits > 0:
+            winnings = random.randint(2_000_000, 7_000_000)
+            self.money += winnings
+            self.show_event("Whale Treatment!", f"The casino comped you the penthouse suite, three bottles, and a personal dealer. You turned it into +${winnings:,}. High life.", "gambling")
+
+        # ── Stock market events — only fire if player has actively traded ──────
+
+        elif r == 39 and self.stock_trades > 3:
+            loss = random.randint(10_000_000, 20_000_000)
+            self.money -= loss
+            self.show_event("Short Squeeze!", f"You shorted a meme stock. Reddit found out and pumped it 800%. Margin call: ${loss:,}. WallStreetBets is celebrating.", "stocks")
+            self.apply_market_effect(["Finance", "Technology"], 0.93, 3, "Short squeeze chaos")
+            self.add_transgression(5)
+
+        elif r == 40 and self.stock_trades > 3:
+            self.money -= 25_000_000
+            self.show_event("SEC Investigation!", "The SEC flagged 47 suspicious trades over 3 months. Full investigation opened. Settlement: $25,000,000. Your trading desk is under scrutiny.", "stocks")
+            self.apply_market_effect(["Finance", "AI"], 0.89, 4, "SEC investigation")
+            self.add_transgression(14)
+
+        elif r == 41 and self.stock_trades > 3:
+            self.money -= 18_000_000
+            self.show_event("Class Action Lawsuit!", "10,000 retail investors filed a class action after your dump crashed their portfolios. Settlement: $18,000,000.", "stocks")
+            self.apply_market_effect(["Finance"], 0.92, 3, "Class action settlement")
+            self.add_transgression(8)
+
+        elif r == 42 and self.stock_trades > 3:
+            gain = random.randint(8_000_000, 18_000_000)
+            self.money += gain
+            self.show_event("Dividend Windfall!", f"Your long positions paid off massively this quarter. Dividends and capital gains: +${gain:,}. Your portfolio manager wants a raise.", "stocks")
+            self.apply_market_effect(["Finance"], 1.04, 2, "Strong earnings surprise")
+
+        # ── New general events ────────────────────────────────────────────────
+
+        elif r == 43:
+            self.money -= 10_000_000
+            self.show_event("Deepfake Scandal!", "Someone deepfaked a video of you confessing to 14 felonies. It went viral. Lose $10,000,000 in reputation cleanup. The lawyers say it'll take months.", "scandal")
+            self.apply_market_effect(["Finance", "Technology"], 0.93, 2, "Deepfake PR crisis")
+            self.add_transgression(6)
+
+        elif r == 44:
+            cost = random.randint(15_000_000, 25_000_000)
+            self.money -= cost
+            self.show_event("Helicopter Tour Disaster!", f"Your private helicopter tour ended in an unscheduled landing on a highway. No fatalities — just ${cost:,} in damages and a viral video.", "event")
+            self.apply_market_effect(["Entertainment"], 0.95, 2, "Celebrity incident")
+
+        elif r == 45:
+            self.money -= 8_000_000
+            self.show_event("Yacht Party Overboard!", "A senator fell off your yacht at 3 AM in international waters. Three witnesses, two on your payroll. Lose $8,000,000. 'Slippery deck,' the PR team said.", "scandal")
+            self.apply_market_effect(["Finance", "Defense"], 0.94, 2, "Political scandal")
+            self.add_transgression(12)
+
+        elif r == 46:
+            if random.random() < 0.4:
+                gain = random.randint(5_000_000, 20_000_000)
+                self.money += gain
+                self.show_event("AI Trading Bot!", f"The AI trading bot you secretly deployed made ${gain:,} in arbitrage trades overnight. Nobody noticed. Yet.", "financial")
+                self.apply_market_effect(["AI", "Finance"], 1.05, 2, "AI trading surge")
+            else:
+                loss = random.randint(15_000_000, 35_000_000)
+                self.money -= loss
+                self.show_event("AI Trading Bot Gone Rogue!", f"The AI trading bot you deployed sold everything at once, then bought crypto with it. Lost ${loss:,}. The bot has been 'retrained'.", "financial")
+                self.apply_market_effect(["AI", "Finance"], 0.90, 3, "AI trading disaster")
 
         self.market.money = self.money
 
@@ -1187,7 +1293,9 @@ class DebtClicker:
     # EVENT POPUP
     # =========================================================
 
-    def show_event(self, title, text):
+    def show_event(self, title, text, category="event"):
+        self.add_message(title, text, category)
+
         popup = tk.Toplevel(self.root)
         popup.title(title)
         popup.configure(bg="#0e1117")
@@ -1213,46 +1321,59 @@ class DebtClicker:
     # =========================================================
 
     def show_revolution_event(self):
+        self.revolution = False
+        self.revolution_triggered = True
+        self.money = 10000
+        self.market.money = self.money
+        self.update_status()
+        self.log_event("SOCIALIST REVOLUTION — transgressions too high. Wealth redistributed to $10,000.")
+        self.add_message(
+            "Socialist Revolution",
+            "Your crimes against the people have become impossible to ignore. "
+            "The revolution has redistributed your wealth. You have $10,000. "
+            "Maybe commit fewer crimes next time.",
+            "revolution"
+        )
+
         popup = tk.Toplevel(self.root)
         popup.title("Socialist Revolution!")
         popup.configure(bg="#0e1117")
-        popup.geometry("440x240")
+        popup.geometry("440x260")
         popup.grab_set()
         popup.resizable(False, False)
 
-        tk.Label(popup, text="Socialist Revolution!", font=("Arial", 13, "bold"),
-                 bg="#0e1117", fg="#ff4444").pack(pady=(18, 6))
+        tk.Frame(popup, bg="#cc0000", height=6).pack(fill="x")
+        tk.Label(popup, text="✊  SOCIALIST REVOLUTION  ✊",
+                 font=("Impact", 14), bg="#cc0000", fg="white").pack(fill="x", pady=6)
 
         tk.Label(popup,
-                 text="While you were on vacation a socialist revolution erupted.\nYou are forced to split your money with the people.\nAccept, or face the consequences...",
+                 text="Your crimes against the people have become impossible to ignore.\n"
+                      "The revolution has redistributed your wealth.\n\n"
+                      "You have $10,000. Start again from the bottom.",
                  font=("Arial", 10), bg="#0e1117", fg="white",
-                 wraplength=400, justify="center").pack(pady=6, padx=20)
+                 wraplength=400, justify="center").pack(pady=16, padx=20)
 
-        btn_frame = tk.Frame(popup, bg="#0e1117")
-        btn_frame.pack(pady=12)
+        tk.Frame(popup, bg="#cc0000", height=3).pack(fill="x")
 
-        def accept():
-            self.revolution = False
-            self.money = 10000
-            self.market.money = self.money
-            self.update_status()
-            self.log_event("You accepted the revolution. Money reduced to $10,000.")
-            popup.destroy()
-
-        def decline():
-            self.revolution = False
-            self.running = False
-            self.log_event("You refused the revolution. They came for you...")
-            popup.destroy()
-            self.root.after(1500, self._show_end_screen)
-
-        tk.Button(btn_frame, text="Accept", bg="#1e2130", fg="#00ff90",
+        tk.Button(popup, text="The people have spoken.",
+                  bg="#1e2130", fg="#00ff90",
                   relief="flat", font=("Arial", 10), padx=18, pady=4,
-                  command=accept).pack(side="left", padx=12)
+                  command=popup.destroy).pack(pady=14)
 
-        tk.Button(btn_frame, text="Decline (Risk Death)", bg="#1e2130", fg="#ff4444",
-                  relief="flat", font=("Arial", 10), padx=18, pady=4,
-                  command=decline).pack(side="left", padx=12)
+    # =========================================================
+    # TRANSGRESSION TRACKING
+    # =========================================================
+
+    def add_transgression(self, amount, decay_rate=0):
+        self.transgressions = min(100, getattr(self, "transgressions", 0) + amount)
+        self.log_event(f"⚠ Transgressions +{amount}  (now {self.transgressions}/100)")
+
+    def check_revolution(self):
+        if getattr(self, "revolution_triggered", False):
+            return
+        if getattr(self, "transgressions", 0) >= 75 and self.revolution:
+            self.apply_market_effect(["ALL"], 0.85, 5, "Socialist revolution")
+            self.show_revolution_event()
 
     # =========================================================
     # MARKET EFFECTS
@@ -1290,6 +1411,7 @@ class DebtClicker:
     # =========================================================
 
     def open_casino(self):
+        self.casino_visits += 1
         win = tk.Toplevel(self.root)
         win.title("Casino")
         win.configure(bg="#0e1117")
@@ -1917,6 +2039,7 @@ class DebtClicker:
         plt.show()
 
     def buy_stock(self, name):
+        self.stock_trades += 1
         result = self.market.buy_stock(name, 1)
         self.money = self.market.money
         self.log_event(result)
@@ -1924,6 +2047,7 @@ class DebtClicker:
         self.refresh_market()
 
     def sell_stock(self, name):
+        self.stock_trades += 1
         result = self.market.sell_stock(name, 1)
         self.money = self.market.money
         self.log_event(result)

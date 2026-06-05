@@ -279,28 +279,13 @@ class EventsMixin:
         self.market.money = self.money
 
     # =========================================================
-    # EVENT POPUP
+    # EVENT POPUP → INBOX
     # =========================================================
 
     def show_event(self, title, text):
-        popup = tk.Toplevel(self.root)
-        popup.title(title)
-        popup.configure(bg="#0e1117")
-        popup.geometry("440x220")
-        popup.grab_set()
-        popup.resizable(False, False)
-
-        tk.Label(popup, text=title, font=("Arial", 13, "bold"),
-                 bg="#0e1117", fg="#ff4444").pack(pady=(18, 6))
-
-        tk.Label(popup, text=text, font=("Arial", 10),
-                 bg="#0e1117", fg="white", wraplength=400,
-                 justify="center").pack(pady=6, padx=20)
-
-        tk.Button(popup, text="OK", bg="#1e2130", fg="#00ff90",
-                  relief="flat", font=("Arial", 10), padx=24, pady=4,
-                  command=popup.destroy).pack(pady=12)
-
+        self.add_message(title, text, category="event")
+        self._add_ticker(f"NEWS: {title}")
+        self.log_event(f"[Event] {title}")
         self.update_status()
 
     # =========================================================
@@ -525,36 +510,14 @@ class EventsMixin:
         self._add_ticker("BREAKING: Billionaire EXPOSED — visited Epstein's island, sources confirm...")
         self.log_event("EXPOSED: Your Epstein island visit leaked to the press. "
                        "Transgressions +35, public opinion -40.")
-
-        popup = tk.Toplevel(self.root)
-        popup.title("BREAKING NEWS")
-        popup.configure(bg="#0e1117")
-        popup.geometry("420x280")
-        popup.resizable(False, False)
-
-        # Fake news chyron
-        tk.Frame(popup, bg="#cc0000", height=6).pack(fill="x")
-        tk.Label(popup, text="🔴  BREAKING NEWS",
-                 font=("Impact", 14), bg="#cc0000", fg="white").pack(fill="x", pady=4)
-        tk.Label(popup,
-                 text="BILLIONAIRE LINKED TO EPSTEIN'S PRIVATE ISLAND",
-                 font=("Impact", 13), bg="#111111", fg="#ffdd00",
-                 wraplength=400).pack(fill="x", pady=6)
-        tk.Label(popup,
-                 text="Sources confirm you were among the guests at Little Saint James.\n"
-                      "Public opinion in freefall. Congressional hearings scheduled.\n"
-                      "Your lawyers are already charging by the hour.",
-                 font=("Arial", 9), bg="#0e1117", fg="#aaaaaa",
-                 wraplength=390, justify="center").pack(pady=10)
-        tk.Frame(popup, bg="#cc0000", height=3).pack(fill="x")
-        ticker = tk.Label(popup,
-                          text="  LIVE  •  Public opinion -40  •  Transgressions +35  •  Markets crashing  •  LIVE  ",
-                          font=("Arial", 8), bg="#cc0000", fg="white")
-        ticker.pack(fill="x")
-        tk.Button(popup, text="No comment.",
-                  font=("Arial", 10, "bold"), bg="#1e2130", fg="white",
-                  relief="flat", padx=20, pady=8,
-                  command=popup.destroy).pack(pady=12)
+        self.add_message(
+            "🔴 BREAKING: Epstein Island Exposed",
+            "Sources confirm you were among the guests at Little Saint James.\n"
+            "Public opinion in freefall. Congressional hearings scheduled.\n"
+            "Your lawyers are already charging by the hour.\n\n"
+            "Transgressions +35  |  Public Opinion −40  |  Markets crashing",
+            category="scandal",
+        )
 
     # =========================================================
     # MARKET EFFECTS

@@ -592,35 +592,12 @@ class FactoryMixin:
         self.update_status()
 
     def _show_factory_event(self, ftype, color, title, body):
-        win = tk.Toplevel(self.root)
-        win.title("Factory Event")
-        win.configure(bg="#0e1117")
-        win.geometry("400x230")
-        win.resizable(False, False)
-        win.lift()
-        win.focus_force()
-
-        def _close(e=None):
-            try:
-                win.destroy()
-            except tk.TclError:
-                pass
-
-        win.bind("<Return>", _close)
-        win.bind("<Escape>", _close)
-        win.after(12000, _close)
-
-        tk.Frame(win, bg=color, height=5).pack(fill="x")
-        tk.Label(win, text=f"{ftype['icon']}  {title.upper()}",
-                 font=("Impact", 18), bg="#0e1117", fg=color).pack(pady=(14, 2))
-        tk.Label(win, text=f"— {ftype['name']} —",
-                 font=("Arial", 9, "italic"), bg="#0e1117", fg="#888").pack()
-        tk.Label(win, text=body, font=("Arial", 10), bg="#0e1117", fg="white",
-                 wraplength=360, justify="center").pack(pady=10)
-        tk.Button(win, text="Noted  [Enter]", font=("Arial", 10),
-                  bg=color, fg="black" if color in ("#00ff90", "#ffaa00") else "white",
-                  relief="flat", padx=20, pady=5, command=_close).pack(pady=(0, 14))
-        tk.Frame(win, bg=color, height=4).pack(fill="x")
+        self.add_message(
+            f"{ftype['icon']} {title} — {ftype['name']}",
+            body,
+            category="event",
+        )
+        self._add_ticker(f"FACTORY: {title} at {ftype['name']}...")
 
     def _show_union_drive(self, fac, ftype, color):
         win = tk.Toplevel(self.root)

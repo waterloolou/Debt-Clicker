@@ -240,6 +240,26 @@ class ElectionsMixin:
     # =========================================================
 
     def open_elections_window(self):
+        if getattr(self, "game_mode", "president") == "billionaire":
+            popup = tk.Toplevel(self.root)
+            popup.title("Unavailable")
+            popup.configure(bg="#0e1117")
+            popup.geometry("380x180")
+            popup.resizable(False, False)
+            tk.Frame(popup, bg="#ffaa00", height=5).pack(fill="x")
+            tk.Label(popup, text="💰  You're a Billionaire",
+                     font=("Impact", 18), bg="#0e1117", fg="#ffaa00").pack(pady=(14, 4))
+            tk.Label(popup,
+                     text="Billionaires don't run for office — they own the people who do.\nElections are not available in Billionaire Mode.",
+                     font=("Arial", 10), bg="#0e1117", fg="#aaaaaa",
+                     wraplength=340, justify="center").pack(pady=4)
+            tk.Button(popup, text="Understood",
+                      font=("Arial", 10, "bold"), bg="#ffaa00", fg="black",
+                      relief="flat", padx=20, pady=6,
+                      command=popup.destroy).pack(pady=10)
+            tk.Frame(popup, bg="#ffaa00", height=5).pack(fill="x", side="bottom")
+            return
+
         win = tk.Toplevel(self.root)
         win.title("Presidential Elections")
         win.configure(bg="#0e1117")
@@ -411,8 +431,6 @@ class ElectionsMixin:
             self.years_in_office   = TERM_LENGTH
             if not hasattr(self, "executive_orders") or self.executive_orders is None:
                 self.executive_orders = []
-            color       = "#00ff90"
-            result_text = "YOU WIN THE ELECTION!"
             flavor_text = (
                 f"The people have spoken. You are now President of {self.country}.\n"
                 f"You have {TERM_LENGTH} years to serve.\n"
@@ -422,9 +440,8 @@ class ElectionsMixin:
                 f"Term {self.presidential_term}/{MAX_TERMS}.")
             self._add_ticker(
                 f"BREAKING: {self.username} wins presidential election in {self.country}!")
+            self.add_message("🗳️ YOU WIN THE ELECTION!", flavor_text, category="election")
         else:
-            color       = "#ff4444"
-            result_text = "YOU LOST THE ELECTION"
             flavor_text = (
                 f"The public wasn't convinced.\n"
                 f"You rolled {roll:.0f} — needed ≤ {win_chance:.0f}.\n"
@@ -432,26 +449,7 @@ class ElectionsMixin:
             self.log_event(
                 f"Election lost. Rolled {roll:.0f}, needed {win_chance:.0f}. "
                 f"Improve public opinion and try again.")
-
-        popup = tk.Toplevel(self.root)
-        popup.title("Election Result")
-        popup.configure(bg="#0e1117")
-        popup.geometry("440x300")
-        popup.resizable(False, False)
-        popup.grab_set()
-
-        tk.Frame(popup, bg=color, height=5).pack(fill="x")
-        tk.Label(popup, text="🗳️", font=("Arial", 36), bg="#0e1117").pack(pady=(16, 0))
-        tk.Label(popup, text=result_text,
-                 font=("Impact", 20), bg="#0e1117", fg=color).pack(pady=(4, 6))
-        tk.Label(popup, text=flavor_text,
-                 font=("Arial", 9), bg="#0e1117", fg="#aaaaaa",
-                 wraplength=380, justify="center").pack(pady=4)
-        tk.Frame(popup, bg=color, height=3).pack(fill="x", pady=(8, 0))
-        tk.Button(popup, text="Close",
-                  font=("Arial", 10, "bold"), bg=color, fg="black",
-                  relief="flat", padx=20, pady=6,
-                  command=popup.destroy).pack(pady=10)
+            self.add_message("🗳️ Election Lost", flavor_text, category="election")
 
         self.update_status()
 
@@ -486,24 +484,7 @@ class ElectionsMixin:
                    f"You are now a civilian. "
                    f"World Map access and Executive Orders are revoked.")
 
-        popup = tk.Toplevel(self.root)
-        popup.title("Presidential Term Expired")
-        popup.configure(bg="#0e1117")
-        popup.geometry("400x260")
-        popup.resizable(False, False)
-
-        tk.Frame(popup, bg="#4499ff", height=5).pack(fill="x")
-        tk.Label(popup, text="🏛️  TERM EXPIRED",
-                 font=("Impact", 20), bg="#0e1117", fg="#4499ff").pack(pady=(14, 6))
-        tk.Label(popup, text=msg,
-                 font=("Arial", 10), bg="#0e1117", fg="#aaaaaa",
-                 wraplength=360, justify="center").pack(pady=4)
-        tk.Frame(popup, bg="#4499ff", height=3).pack(fill="x", pady=(10, 0))
-        tk.Button(popup, text="Understood",
-                  font=("Arial", 10, "bold"), bg="#4499ff", fg="black",
-                  relief="flat", padx=20, pady=6,
-                  command=popup.destroy).pack(pady=10)
-
+        self.add_message("🏛️ Presidential Term Expired", msg, category="election")
         self.update_status()
 
     # =========================================================
@@ -553,6 +534,36 @@ class ElectionsMixin:
 
         self._update_bars()
 
+    def _apply_order_immediately(self, order):
+        """Apply a single executive order effect right away when it is signed."""
+        etype = order.get("type")
+        val   = order.get("value", 0)
+
+        if etype == "transgression_decay_bonus":
+            self.transgressions = max(0, self.transgressions - val)
+        elif etype == "public_opinion_daily":
+            self.public_opinion = min(100, self.public_opinion + val)
+        elif etype == "happiness_daily":
+            self.happiness = min(100, self.happiness + val)
+        elif etype == "daily_expense_multiplier":
+            refund = int(self.money * 0.01 * (1 - val))
+            if refund > 0:
+                self.money += refund
+                self.market.money = self.money
+        elif etype == "income_multiplier":
+            base  = sum(op.get("income", 0) for op in getattr(self, "oil_operations", []))
+            bonus = int(base * (val - 1))
+            if bonus > 0:
+                self.money += bonus
+                self.market.money = self.money
+        elif etype == "wanted_fine_reduction":
+            if self.wanted_level > 0:
+                refund = int(self.wanted_level * 500_000 * (1 - val))
+                self.money += refund
+                self.market.money = self.money
+        self._update_bars()
+        self.update_status()
+
     # Helpers used by other mixins to read active exec order multipliers
 
     def get_executive_loan_rate_multiplier(self):
@@ -567,6 +578,10 @@ class ElectionsMixin:
     # =========================================================
 
     def open_executive_order_window(self):
+        if getattr(self, "game_mode", "president") == "billionaire":
+            self.log_event(
+                "Billionaires don't sign executive orders — that's a politician's job.")
+            return
         if not getattr(self, "is_president", False):
             self.log_event(
                 "You must be President to sign Executive Orders. "
@@ -734,6 +749,8 @@ class ElectionsMixin:
                 result  = self.groq_engine.execute_command(self, command)
                 groq_result_lbl.config(text=result, fg="#00ff90")
                 self.log_event(f"[Groq] {result}")
+                self._add_ticker(f"EXECUTIVE ACTION: {result}")
+                self.add_message("🧠 Groq Executive Action", result, category="groq")
                 self.update_status()
             except Exception as exc:
                 groq_result_lbl.config(text=str(exc), fg="#ff4444")
@@ -796,13 +813,23 @@ class ElectionsMixin:
 
         if not hasattr(self, "executive_orders") or self.executive_orders is None:
             self.executive_orders = []
-        self.executive_orders.append({"type": etype, "value": val, "description": desc})
+        new_order = {"type": etype, "value": val, "description": desc}
+        self.executive_orders.append(new_order)
+
+        # Apply effect immediately — don't wait for the next daily tick
+        self._apply_order_immediately(new_order)
 
         status_var.set(f"SIGNED: {reason}")
         status_lbl.config(fg="#00ff90")
         self.log_event(f"Executive Order SIGNED: {desc}  [{etype} = {val}]")
         self._add_ticker(
             f"POLITICS: President {self.username} signs executive order — {desc}...")
+        self._add_ticker("🦅  ALL PRAISE ELON MUSK")
+        self.add_message(
+            f"📜 Executive Order Signed: {desc}",
+            f"{reason}\n\nEffect: {etype} = {val}\n\nAll Praise Elon Musk 🦅",
+            category="groq",
+        )
 
         self.root.after(1400, lambda: (win.destroy(), self.open_executive_order_window()))
 

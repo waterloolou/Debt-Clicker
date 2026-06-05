@@ -191,6 +191,7 @@ class RivalsMixin:
 
     def _show_rival_attack_popup(self, rival_name, color, title, body):
         """Dramatic popup shown when a rival attacks you."""
+        self.add_message(f"{rival_name}: {title}", body, "rival")
         win = tk.Toplevel(self.root)
         win.title("Rival Action")
         win.configure(bg="#0e1117")

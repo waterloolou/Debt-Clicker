@@ -25,10 +25,11 @@ from factory_mixin import FactoryMixin
 from save_mixin import SaveMixin
 from pleasures_mixin import PleasuresMixin
 from elections_mixin import ElectionsMixin
+from messages_mixin import MessagesMixin
 from groq_integration import GroqOrdersEngine
 
 
-class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin, PleasuresMixin, ElectionsMixin):
+class DebtClicker(MessagesMixin, ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin, PleasuresMixin, ElectionsMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -58,6 +59,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
 
         self.username        = ""
         self.country         = ""
+        self.game_mode       = "president"   # "billionaire" or "president"
         self.money           = 100_000_000
         self.days            = 0
         self.running         = False
@@ -126,6 +128,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
             self.root.attributes("-fullscreen", False)
 
     def _init_flags(self):
+        self.game_mode       = "president"   # overwritten by start_game after _init_flags
         self.epstein         = False
         self.epstein_visited = False
         self.epstein_catch_days = 0
@@ -199,11 +202,31 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
     # =========================================================
 
     def start_game(self):
+        # Preserve mode across _init_flags (which would reset it)
+        _mode = getattr(self, "game_mode", "president")
+
         self.money   = 100_000_000
         self.days    = 0
         self.running = True
         self.market.money = self.money
         self._init_flags()
+
+        self.game_mode = _mode   # restore after init_flags reset
+
+        if self.game_mode == "billionaire":
+            self.money = 1_000_000_000
+            # Starter factories: Steel Mill, Oil Refinery, Tech Plant
+            self.factories = [
+                {"type_id": "steel_mill",   "worker_tier": "standard",
+                 "on_strike": False, "strike_days": 0, "unionized": False, "days_owned": 0},
+                {"type_id": "oil_refinery", "worker_tier": "standard",
+                 "on_strike": False, "strike_days": 0, "unionized": False, "days_owned": 0},
+                {"type_id": "tech_factory", "worker_tier": "standard",
+                 "on_strike": False, "strike_days": 0, "unionized": False, "days_owned": 0},
+            ]
+
+        self.market.money = self.money
+
         # Apply legacy bonus from previous runs
         legacy = self._load_legacy()
         if legacy > 0:
@@ -212,7 +235,17 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
             self.log_event(f"Legacy bonus applied: +${legacy:,}")
         self.init_rivals()
         self.clock_seconds = 0
-        self.log_event(f"Welcome, {self.username}. Your empire begins its slow collapse...")
+
+        if self.game_mode == "billionaire":
+            self.log_event(f"💰 BILLIONAIRE MODE — Welcome, {self.username}.")
+            self.log_event("  Starting capital: $1,000,000,000")
+            self.log_event("  Factories online: Steel Mill | Oil Refinery | Tech Plant")
+            self.log_event("  World Map: UNLOCKED  |  Elections: UNAVAILABLE")
+        else:
+            self.log_event(f"🗳️ PRESIDENT MODE — Welcome, {self.username}.")
+            self.log_event("  Starting capital: $100,000,000")
+            self.log_event("  Build your wealth, then run for President.")
+
         self.log_event("Fetching live stock data for all markets...")
         self.update_status()
         threading.Thread(target=self.fetch_real_stock_data, daemon=True).start()

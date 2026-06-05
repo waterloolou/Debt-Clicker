@@ -187,7 +187,8 @@ class WorldMapMixin:
     # =========================================================
 
     def open_world_map(self):
-        if not getattr(self, "is_president", False):
+        is_billionaire = getattr(self, "game_mode", "president") == "billionaire"
+        if not getattr(self, "is_president", False) and not is_billionaire:
             self.log_event(
                 "Access denied. You must be President to use the World Map. "
                 "Win an election first via the Elections tab.")

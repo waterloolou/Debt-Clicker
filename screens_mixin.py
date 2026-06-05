@@ -10,6 +10,8 @@ PLAYABLE_COUNTRIES = sorted([
     "United States of America", "Russia", "China",
     # Western-aligned
     "Canada", "Australia", "Japan", "South Korea",
+    # Middle East
+    "Israel",
     # Europe
     "Albania", "Austria", "Belarus", "Belgium",
     "Bosnia and Herzegovina", "Bulgaria", "Croatia", "Cyprus",
@@ -20,6 +22,9 @@ PLAYABLE_COUNTRIES = sorted([
     "Romania", "Serbia", "Slovakia", "Slovenia", "Spain", "Sweden",
     "Switzerland", "Ukraine", "United Kingdom",
 ])
+
+# Countries available in President mode
+PRESIDENT_COUNTRIES = ["Israel", "United States of America"]
 
 
 class ScreensMixin:
@@ -48,13 +53,99 @@ class ScreensMixin:
         frame = tk.Frame(self.root, bg="#0e1117")
 
         tk.Label(frame, text="DEBT CLICKER",
-                 font=("Impact", 48), bg="#0e1117", fg="#ff2222").pack(pady=(60, 4))
+                 font=("Impact", 48), bg="#0e1117", fg="#ff2222").pack(pady=(30, 4))
 
         tk.Label(frame,
                  text="You are in the top 1%.\nYou have become corrupt.\nRandom disasters will destroy your empire.\nHow long can you last?",
                  font=("Arial", 11), bg="#0e1117", fg="#aaaaaa",
-                 justify="center").pack(pady=(0, 40))
+                 justify="center").pack(pady=(0, 14))
 
+        # ── Game mode selection ─────────────────────────────────────────────
+        tk.Label(frame, text="CHOOSE YOUR PATH",
+                 font=("Arial", 10, "bold"), bg="#0e1117", fg="#555555").pack()
+
+        self._game_mode_var = tk.StringVar(value="president")
+
+        mode_row = tk.Frame(frame, bg="#0e1117")
+        mode_row.pack(pady=(6, 14))
+
+        def _make_mode_card(parent, title, icon, money_txt, features, mode_key, accent):
+            card = tk.Frame(parent, bg="#111520", padx=14, pady=10,
+                            highlightthickness=2,
+                            highlightbackground="#1e2130")
+            card.pack(side="left", padx=8)
+            hdr = tk.Frame(card, bg="#111520")
+            hdr.pack(anchor="w")
+            tk.Label(hdr, text=icon + "  " + title,
+                     font=("Arial", 12, "bold"), bg="#111520", fg=accent).pack(side="left")
+            tk.Label(card, text=money_txt,
+                     font=("Arial", 9, "bold"), bg="#111520", fg="#ffffff").pack(anchor="w", pady=(2, 4))
+            for feat in features:
+                tk.Label(card, text="• " + feat, font=("Arial", 8),
+                         bg="#111520", fg="#888888").pack(anchor="w")
+            # invisible click overlay on the whole card
+            for child in card.winfo_children():
+                child.bind("<Button-1>", lambda e, mk=mode_key: _select_mode(mk))
+            card.bind("<Button-1>", lambda e, mk=mode_key: _select_mode(mk))
+            return card
+
+        self._mode_bill_card = _make_mode_card(
+            mode_row,
+            title="BILLIONAIRE",
+            icon="💰",
+            money_txt="Start: $1,000,000,000",
+            features=["World Map from the start",
+                      "3 starter factories",
+                      "No elections or exec orders"],
+            mode_key="billionaire",
+            accent="#ffaa00",
+        )
+        self._mode_pres_card = _make_mode_card(
+            mode_row,
+            title="PRESIDENT",
+            icon="🗳️",
+            money_txt="Start: $100,000,000",
+            features=["Run for president",
+                      "Sign executive orders",
+                      "USA or Israel only"],
+            mode_key="president",
+            accent="#4499ff",
+        )
+
+        def _select_mode(mode):
+            self._game_mode_var.set(mode)
+            if mode == "billionaire":
+                self._mode_bill_card.config(bg="#2a1a00",
+                                            highlightbackground="#ffaa00",
+                                            highlightthickness=2)
+                for w in self._mode_bill_card.winfo_children():
+                    w.config(bg="#2a1a00")
+                self._mode_pres_card.config(bg="#111520",
+                                            highlightbackground="#1e2130",
+                                            highlightthickness=1)
+                for w in self._mode_pres_card.winfo_children():
+                    w.config(bg="#111520")
+                self.country_combo.config(values=PLAYABLE_COUNTRIES)
+            else:
+                self._mode_bill_card.config(bg="#111520",
+                                            highlightbackground="#1e2130",
+                                            highlightthickness=1)
+                for w in self._mode_bill_card.winfo_children():
+                    w.config(bg="#111520")
+                self._mode_pres_card.config(bg="#0a1830",
+                                            highlightbackground="#4499ff",
+                                            highlightthickness=2)
+                for w in self._mode_pres_card.winfo_children():
+                    w.config(bg="#0a1830")
+                self.country_combo.config(values=PRESIDENT_COUNTRIES)
+                if self.country_var.get() not in PRESIDENT_COUNTRIES:
+                    self.country_var.set("")
+
+        self._select_game_mode = _select_mode
+        # Apply default visual (president selected)
+        frame.after(50, lambda: _select_mode("president"))
+
+        # ── Name + Country ──────────────────────────────────────────────────
         tk.Label(frame, text="Enter your name:", font=("Arial", 11),
                  bg="#0e1117", fg="white").pack()
 
@@ -75,7 +166,7 @@ class ScreensMixin:
                         foreground="white", selectbackground="#2e3140",
                         selectforeground="white", arrowcolor="white")
         self.country_combo = ttk.Combobox(frame, textvariable=self.country_var,
-                                          values=PLAYABLE_COUNTRIES,
+                                          values=PRESIDENT_COUNTRIES,
                                           state="readonly", width=24,
                                           font=("Arial", 11),
                                           style="Dark.TCombobox",
@@ -334,9 +425,15 @@ class ScreensMixin:
         if not country:
             self.start_error.config(text="Please select a country.")
             return
+        mode = getattr(self, "_game_mode_var", None)
+        mode = mode.get() if mode else "president"
+        if mode == "president" and country not in PRESIDENT_COUNTRIES:
+            self.start_error.config(text="President mode: choose USA or Israel.")
+            return
         self.start_error.config(text="")
-        self.username = name
-        self.country  = country
+        self.username  = name
+        self.country   = country
+        self.game_mode = mode
         self.show_screen("game")
         self.start_game()
 
@@ -387,6 +484,9 @@ class ScreensMixin:
                                       bg="#0e1117", highlightthickness=0)
         self.clock_canvas.pack(side="right")
         self._draw_clock()
+
+        inbox_btn = self._build_inbox_button(right_top)
+        inbox_btn.pack(side="right", padx=(0, 8))
 
         # ── Primary action buttons ──────────────────────────────
         btn_frame = tk.Frame(frame, bg="#0e1117")
@@ -675,6 +775,8 @@ class ScreensMixin:
 
         self.username_entry.delete(0, tk.END)
         self.country_var.set("")
+        if hasattr(self, "_select_game_mode"):
+            self._select_game_mode("president")
         self.show_screen("start")
 
     # =========================================================
