@@ -93,7 +93,7 @@ class CasinoMixin:
         win = tk.Toplevel(self.root)
         win.title("Casino")
         win.configure(bg="#0e1117")
-        win.geometry("560x420")
+        win.geometry("720x420")
         win.resizable(False, False)
 
         tk.Label(win, text="🎰  CASINO  🎰",
@@ -106,6 +106,7 @@ class CasinoMixin:
             ("🔫", "Russian\nRoulette", "1-in-6 chance of death.\nSurvive to double your bet.", self._open_russian_roulette),
             ("🎰", "Slot\nMachine",    "Spin 3 reels.\nMatch symbols to win big.",           self._open_slot_machine),
             ("🂡", "Poker",            "5-card draw.\nBet first, then see your hand.",        self._open_poker),
+            ("🃏", "Blackjack",        "Beat the dealer.\nBlackjack pays 3:2.",              self._open_blackjack),
         ]
 
         for icon, title, desc, cmd in games:
@@ -273,6 +274,9 @@ class CasinoMixin:
         except ValueError:
             self._rr_result.config(text="Invalid bet.", fg="#ff4444")
             return
+        if bet <= 0:
+            self._rr_result.config(text="Bet must be greater than $0.", fg="#ff4444")
+            return
         if bet > self.money:
             self._rr_result.config(text="Not enough money.", fg="#ff4444")
             return
@@ -425,6 +429,9 @@ class CasinoMixin:
             bet = float(self._slot_bet_var.get().replace(",", ""))
         except ValueError:
             self._slot_result.config(text="Invalid bet.", fg="#ff4444")
+            return
+        if bet <= 0:
+            self._slot_result.config(text="Bet must be greater than $0.", fg="#ff4444")
             return
         if bet > self.money:
             self._slot_result.config(text="Not enough money.", fg="#ff4444")
@@ -718,7 +725,8 @@ class CasinoMixin:
             counts_map[rv] = counts_map.get(rv, 0) + 1
         counts = sorted(counts_map.values(), reverse=True)
 
-        if flush and straight and ranks[0] == 12: name, mult = "Royal Flush! 👑",   250
+        if flush and straight and ranks == [12, 11, 10, 9, 8]:
+                                                   name, mult = "Royal Flush! 👑",   250
         elif flush and straight:                   name, mult = "Straight Flush!",   50
         elif counts[0] == 4:                       name, mult = "Four of a Kind!",   25
         elif counts[:2] == [3, 2]:                 name, mult = "Full House!",        9
@@ -754,10 +762,281 @@ class CasinoMixin:
             lbl.config(text="")
 
     # =========================================================
+    # BLACKJACK
+    # =========================================================
+
+    def _open_blackjack(self):
+        win = tk.Toplevel(self.root)
+        win.title("Blackjack")
+        win.configure(bg="#0e1117")
+        win.geometry("540x520")
+        win.resizable(False, False)
+
+        tk.Label(win, text="🃏 Blackjack",
+                 font=("Impact", 22), bg="#0e1117", fg="#00ff90").pack(pady=(14, 2))
+        tk.Label(win, text="Blackjack pays 3:2  •  Dealer stands on 17",
+                 font=("Arial", 9), bg="#0e1117", fg="#888").pack()
+
+        dealer_outer = tk.Frame(win, bg="#0e1117")
+        dealer_outer.pack(pady=(12, 2))
+        self._bj_dealer_lbl = tk.Label(dealer_outer, text="Dealer: ?",
+                                        font=("Arial", 11, "bold"), bg="#0e1117", fg="#aaaaaa")
+        self._bj_dealer_lbl.pack()
+        self._bj_dealer_frame = tk.Frame(dealer_outer, bg="#0e1117", height=85)
+        self._bj_dealer_frame.pack()
+
+        player_outer = tk.Frame(win, bg="#0e1117")
+        player_outer.pack(pady=(12, 2))
+        self._bj_player_lbl = tk.Label(player_outer, text="You: ?",
+                                        font=("Arial", 11, "bold"), bg="#0e1117", fg="#aaaaaa")
+        self._bj_player_lbl.pack()
+        self._bj_player_frame = tk.Frame(player_outer, bg="#0e1117", height=85)
+        self._bj_player_frame.pack()
+
+        self._bj_result = tk.Label(win, text="Place your bet and click Deal.",
+                                    font=("Arial", 12, "bold"), bg="#0e1117", fg="#aaaaaa")
+        self._bj_result.pack(pady=8)
+
+        bet_frame = tk.Frame(win, bg="#0e1117")
+        bet_frame.pack(pady=4)
+        tk.Label(bet_frame, text="Bet: $", font=("Arial", 11), bg="#0e1117", fg="white").pack(side="left")
+        self._bj_bet_var = tk.StringVar(value="1000000")
+        self._bj_bet_entry = tk.Entry(bet_frame, textvariable=self._bj_bet_var, width=12,
+                 bg="#1e2130", fg="white", font=("Arial", 11),
+                 insertbackground="white", relief="flat")
+        self._bj_bet_entry.pack(side="left", ipady=4)
+
+        btn_frame = tk.Frame(win, bg="#0e1117")
+        btn_frame.pack(pady=8)
+
+        self._bj_deal_btn = tk.Button(btn_frame, text="Deal", font=("Arial", 11, "bold"),
+                                       bg="#00aa44", fg="white", relief="flat",
+                                       padx=18, pady=6, command=self._bj_deal)
+        self._bj_deal_btn.pack(side="left", padx=6)
+
+        self._bj_hit_btn = tk.Button(btn_frame, text="Hit", font=("Arial", 11, "bold"),
+                                      bg="#1e2130", fg="#555555", relief="flat",
+                                      padx=18, pady=6, state="disabled",
+                                      command=self._bj_hit)
+        self._bj_hit_btn.pack(side="left", padx=6)
+
+        self._bj_stand_btn = tk.Button(btn_frame, text="Stand", font=("Arial", 11, "bold"),
+                                        bg="#1e2130", fg="#555555", relief="flat",
+                                        padx=18, pady=6, state="disabled",
+                                        command=self._bj_stand)
+        self._bj_stand_btn.pack(side="left", padx=6)
+
+        self._bj_double_btn = tk.Button(btn_frame, text="Double", font=("Arial", 11, "bold"),
+                                         bg="#1e2130", fg="#555555", relief="flat",
+                                         padx=14, pady=6, state="disabled",
+                                         command=self._bj_double)
+        self._bj_double_btn.pack(side="left", padx=6)
+
+        self._bj_win = win
+        self._bj_phase = "bet"
+        self._bj_deck = []
+        self._bj_player_hand = []
+        self._bj_dealer_hand = []
+        self._bj_current_bet = 0
+
+    def _bj_new_deck(self):
+        cards = [(r, s) for s in self.SUITS for r in self.RANKS] * 2
+        random.shuffle(cards)
+        self._bj_deck = cards
+
+    def _bj_hand_value(self, hand):
+        total, aces = 0, 0
+        for rank, suit in hand:
+            if rank in ('J', 'Q', 'K'):
+                total += 10
+            elif rank == 'A':
+                aces += 1
+                total += 11
+            else:
+                total += int(rank)
+        while total > 21 and aces:
+            total -= 10
+            aces -= 1
+        return total
+
+    def _bj_draw_card_canvas(self, c, rank, suit, face_down=False):
+        c.delete("all")
+        if face_down:
+            c.configure(bg="#1a2a3a", highlightbackground="#333")
+            c.create_rectangle(3, 3, 49, 72, fill="#1e3a5f", outline="#2255aa", width=1)
+            for y in range(7, 72, 7):
+                c.create_line(3, y, 49, y, fill="#1a3050", width=1)
+            for x in range(7, 49, 7):
+                c.create_line(x, 3, x, 72, fill="#1a3050", width=1)
+        else:
+            color = self.SUIT_COLORS[suit]
+            c.configure(bg="white", highlightbackground="#333")
+            c.create_rectangle(1, 1, 51, 74, fill="white", outline="#ccc", width=1)
+            c.create_text(5,  8,  text=rank, anchor="nw", font=("Arial", 9, "bold"), fill=color)
+            c.create_text(26, 38, text=suit, anchor="center", font=("Arial", 20), fill=color)
+            c.create_text(47, 67, text=rank, anchor="se", font=("Arial", 9, "bold"), fill=color)
+
+    def _bj_render_hands(self, reveal_dealer=False):
+        for widget in self._bj_dealer_frame.winfo_children():
+            widget.destroy()
+        for widget in self._bj_player_frame.winfo_children():
+            widget.destroy()
+
+        for i, (rank, suit) in enumerate(self._bj_dealer_hand):
+            c = tk.Canvas(self._bj_dealer_frame, width=52, height=75,
+                          bg="#111", highlightthickness=1, highlightbackground="#444")
+            c.pack(side="left", padx=2)
+            self._bj_draw_card_canvas(c, rank, suit,
+                                       face_down=(i == 1 and not reveal_dealer))
+
+        for rank, suit in self._bj_player_hand:
+            c = tk.Canvas(self._bj_player_frame, width=52, height=75,
+                          bg="#111", highlightthickness=1, highlightbackground="#444")
+            c.pack(side="left", padx=2)
+            self._bj_draw_card_canvas(c, rank, suit)
+
+        player_val = self._bj_hand_value(self._bj_player_hand)
+        self._bj_player_lbl.config(text=f"You: {player_val}")
+
+        if reveal_dealer:
+            dealer_val = self._bj_hand_value(self._bj_dealer_hand)
+            self._bj_dealer_lbl.config(text=f"Dealer: {dealer_val}")
+        else:
+            visible = self._bj_hand_value([self._bj_dealer_hand[0]])
+            self._bj_dealer_lbl.config(text=f"Dealer: {visible} + ?")
+
+    def _bj_set_action_buttons(self, enabled):
+        if enabled:
+            can_double = self._bj_current_bet <= self.money
+            self._bj_hit_btn.config(state="normal", bg="#2255cc", fg="white")
+            self._bj_stand_btn.config(state="normal", bg="#cc6600", fg="white")
+            self._bj_double_btn.config(
+                state="normal" if can_double else "disabled",
+                bg="#886600" if can_double else "#1e2130",
+                fg="white" if can_double else "#555555")
+        else:
+            for btn in (self._bj_hit_btn, self._bj_stand_btn, self._bj_double_btn):
+                btn.config(state="disabled", bg="#1e2130", fg="#555555")
+
+    def _bj_deal(self):
+        try:
+            bet = float(self._bj_bet_var.get().replace(",", ""))
+        except ValueError:
+            self._bj_result.config(text="Invalid bet.", fg="#ff4444")
+            return
+        if bet <= 0:
+            self._bj_result.config(text="Bet must be > 0.", fg="#ff4444")
+            return
+        if bet > self.money:
+            self._bj_result.config(text="Not enough money.", fg="#ff4444")
+            return
+
+        self.money -= bet
+        self.market.money = self.money
+        self.update_status()
+        self._bj_current_bet = bet
+
+        self._bj_new_deck()
+        self._bj_player_hand = [self._bj_deck.pop(), self._bj_deck.pop()]
+        self._bj_dealer_hand = [self._bj_deck.pop(), self._bj_deck.pop()]
+        self._bj_render_hands(reveal_dealer=False)
+
+        player_val = self._bj_hand_value(self._bj_player_hand)
+        dealer_val = self._bj_hand_value(self._bj_dealer_hand)
+
+        if player_val == 21:
+            self._bj_end_round("blackjack" if dealer_val != 21 else "push")
+            return
+
+        self._bj_phase = "play"
+        self._bj_deal_btn.config(state="disabled")
+        self._bj_bet_entry.config(state="disabled")
+        self._bj_set_action_buttons(True)
+        self._bj_result.config(text="Hit, Stand, or Double?", fg="#aaaaaa")
+
+    def _bj_hit(self):
+        self._bj_player_hand.append(self._bj_deck.pop())
+        self._bj_double_btn.config(state="disabled", bg="#1e2130", fg="#555555")
+        self._bj_render_hands(reveal_dealer=False)
+        val = self._bj_hand_value(self._bj_player_hand)
+        if val > 21:
+            self._bj_end_round("bust")
+        elif val == 21:
+            self._bj_stand()
+
+    def _bj_double(self):
+        self.money -= self._bj_current_bet
+        self.market.money = self.money
+        self.update_status()
+        self._bj_current_bet *= 2
+        self._bj_player_hand.append(self._bj_deck.pop())
+        self._bj_render_hands(reveal_dealer=False)
+        val = self._bj_hand_value(self._bj_player_hand)
+        if val > 21:
+            self._bj_end_round("bust")
+        else:
+            self._bj_stand()
+
+    def _bj_stand(self):
+        self._bj_set_action_buttons(False)
+        while self._bj_hand_value(self._bj_dealer_hand) < 17:
+            self._bj_dealer_hand.append(self._bj_deck.pop())
+        dealer_val = self._bj_hand_value(self._bj_dealer_hand)
+        player_val = self._bj_hand_value(self._bj_player_hand)
+        self._bj_render_hands(reveal_dealer=True)
+        if dealer_val > 21 or player_val > dealer_val:
+            self._bj_end_round("win")
+        elif player_val == dealer_val:
+            self._bj_end_round("push")
+        else:
+            self._bj_end_round("lose")
+
+    def _bj_end_round(self, outcome):
+        self._bj_render_hands(reveal_dealer=True)
+        self._bj_set_action_buttons(False)
+        bet = self._bj_current_bet
+
+        if outcome == "blackjack":
+            payout = bet * 2.5
+            profit = bet * 1.5
+            self.money += payout
+            self._bj_result.config(text=f"BLACKJACK! +${profit:,.0f}", fg="#ffdd44")
+            self.log_event(f"Blackjack! +${profit:,.0f}")
+            _play_sound("jackpot")
+        elif outcome == "win":
+            self.money += bet * 2
+            self._bj_result.config(text=f"You win! +${bet:,.0f}", fg="#00ff90")
+            self.log_event(f"Blackjack win +${bet:,.0f}")
+            _play_sound("win")
+        elif outcome == "push":
+            self.money += bet
+            self._bj_result.config(text="Push — bet returned.", fg="#aaaaaa")
+            self.log_event("Blackjack push")
+        elif outcome == "bust":
+            self._bj_result.config(text=f"Bust! Lost ${bet:,.0f}", fg="#ff4444")
+            self.log_event(f"Blackjack bust, lost ${bet:,.0f}")
+            _play_sound("loss")
+        else:
+            self._bj_result.config(text=f"Dealer wins. Lost ${bet:,.0f}", fg="#ff4444")
+            self.log_event(f"Blackjack dealer wins, lost ${bet:,.0f}")
+            _play_sound("loss")
+
+        self.market.money = self.money
+        self.update_status()
+        self._bj_deal_btn.config(state="normal")
+        self._bj_bet_entry.config(state="normal")
+        self._bj_phase = "bet"
+
+    # =========================================================
     # WORK
     # =========================================================
 
     def work(self):
+        last = getattr(self, "_last_work_year", -1)
+        if last == self.days:
+            self.log_event("You already worked this year. Come back next year.")
+            return
+        self._last_work_year = self.days
         _ranges = [
             (10_000, 200_000),
             (1_000_000, 5_000_000),
