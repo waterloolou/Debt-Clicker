@@ -25,6 +25,7 @@ from factory_mixin import FactoryMixin
 from save_mixin import SaveMixin
 from pleasures_mixin import PleasuresMixin
 from elections_mixin import ElectionsMixin
+from groq_integration import GroqOrdersEngine
 
 
 class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin, PleasuresMixin, ElectionsMixin):
@@ -66,6 +67,7 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.net_client      = None
 
         self._init_flags()
+        self.groq_engine = GroqOrdersEngine()
 
         self.market = StockMarket()
         self.market.money = self.money
@@ -183,6 +185,14 @@ class DebtClicker(ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, Asse
         self.years_in_office    = 0
         self.senators_bribed    = 0
         self.executive_orders   = []
+        self.groq_map_aliases   = {}
+        self.groq_propaganda_days  = 0
+        self.groq_emergency_days   = 0
+        self.groq_censorship_days  = 0
+        from world_map_mixin import RESOURCE_DATA
+        self.groq_known_places = sorted({
+            c for rd in RESOURCE_DATA.values() for c in rd["countries"]
+        })
 
     # =========================================================
     # GAME START

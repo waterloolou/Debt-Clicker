@@ -3,6 +3,7 @@ elections_mixin.py — Presidential Elections & Executive Orders
 """
 
 import tkinter as tk
+from tkinter import ttk
 import threading
 import json
 import random
@@ -27,11 +28,11 @@ _EFFECT_RANGES = {
 
 # Automatic rejection — orders containing these phrases are instantly denied.
 _REJECT_WORDS = [
-    "infinite", "unlimited", "no cost", "zero cost", "free money",
+    "infinite", "unlimited", "free money",
     "god mode", "always win", "never lose", "immortal", "invincible",
-    "cheat", "hack", "exploit", "100% discount", "no expenses",
-    "zero expenses", "maximum money", "all money", "infinite income",
-    "instant win", "delete debt", "remove all fines",
+    "cheat", "hack", "exploit", "100% discount",
+    "maximum money", "all money", "infinite income",
+    "instant win", "delete debt",
 ]
 
 # One entry per available effect type.
@@ -575,8 +576,8 @@ class ElectionsMixin:
         win = tk.Toplevel(self.root)
         win.title("Executive Orders")
         win.configure(bg="#0e1117")
-        win.geometry("600x640")
-        win.resizable(False, False)
+        win.geometry("600x820")
+        win.resizable(False, True)
 
         tk.Frame(win, bg="#884400", height=5).pack(fill="x")
         tk.Label(win, text="EXECUTIVE ORDERS",
@@ -588,6 +589,25 @@ class ElectionsMixin:
                  font=("Arial", 9), bg="#0e1117", fg="#555").pack(pady=(0, 4))
 
         tk.Frame(win, bg="#1e2130", height=1).pack(fill="x", padx=20, pady=4)
+
+        self._groq_api_key_var = tk.StringVar(value=getattr(self, "groq_engine", None).api_key if getattr(self, "groq_engine", None) else "")
+        key_frame = tk.Frame(win, bg="#0e1117")
+        key_frame.pack(fill="x", padx=20, pady=(6, 8))
+        tk.Label(key_frame, text="Groq API Key:", font=("Arial", 9), bg="#0e1117", fg="#aaaaaa").pack(side="left")
+        tk.Entry(key_frame, textvariable=self._groq_api_key_var,
+                 font=("Arial", 9), bg="#1e2130", fg="white",
+                 insertbackground="white", relief="flat").pack(side="left", fill="x", expand=True, padx=(8, 4))
+        tk.Button(key_frame, text="Set Key",
+                  font=("Arial", 9, "bold"), bg="#2e4a7e", fg="white",
+                  activebackground="#3e5a8e", relief="flat",
+                  padx=12, pady=4,
+                  command=self._set_groq_api_key).pack(side="left")
+
+        self._groq_key_status_label = tk.Label(win,
+                                               text=("Groq key loaded. Executive orders will be reviewed by Groq AI." if getattr(self, "groq_engine", None) and self.groq_engine.get_api_key_status() else "Groq key not set. Using local parser fallback."),
+                                               font=("Arial", 9), bg="#0e1117", fg="#aaaaaa",
+                                               wraplength=540, justify="left")
+        self._groq_key_status_label.pack(anchor="w", padx=20, pady=(0, 8))
 
         # ── Active orders ──────────────────────────────────────────────────
         tk.Label(win, text="ACTIVE ORDERS",
@@ -660,13 +680,68 @@ class ElectionsMixin:
                     status_var.set("Please write a more descriptive order.")
                     status_lbl.config(fg="#ff4444")
                     return
+                has_key = getattr(self, "groq_engine", None) and self.groq_engine.get_api_key_status()
                 sign_btn.config(state="disabled", text="Reviewing order...")
-                status_var.set("Reviewing with the legal board...")
+                status_var.set("Reviewing order with Groq AI..." if has_key else "Reviewing order with local review...")
                 status_lbl.config(fg="#ffaa00")
                 win.update_idletasks()
                 self._submit_executive_order(text, status_var, status_lbl, sign_btn, w)
 
             sign_btn.config(command=on_sign)
+
+        tk.Frame(win, bg="#1e2130", height=1).pack(fill="x", padx=20, pady=(12, 4))
+
+        # ── Groq Map & Power Actions ───────────────────────────────────────
+        tk.Label(win, text="GROQ POWER ACTIONS",
+                 font=("Arial", 10, "bold"), bg="#0e1117", fg="#888").pack(anchor="w", padx=20)
+        tk.Label(win,
+                 text="Use Groq AI to rename countries, impose sanctions, run propaganda, and more.",
+                 font=("Arial", 9), bg="#0e1117", fg="#555",
+                 wraplength=540, justify="left").pack(anchor="w", padx=20, pady=(0, 4))
+
+        action_row = tk.Frame(win, bg="#0e1117")
+        action_row.pack(fill="x", padx=20, pady=(0, 4))
+        tk.Label(action_row, text="Action:", font=("Arial", 9), bg="#0e1117", fg="#cccccc").pack(side="left")
+        from groq_integration import GroqOrdersEngine
+        _engine = getattr(self, "groq_engine", None) or GroqOrdersEngine()
+        action_options = _engine.get_safe_action_labels()
+        action_labels  = [lbl for _, lbl in action_options]
+        _action_key_map = {lbl: key for key, lbl in action_options}
+        _groq_action_var = tk.StringVar(value=action_labels[0])
+        ttk.Combobox(action_row, values=action_labels, state="readonly",
+                     textvariable=_groq_action_var, width=32).pack(side="left", padx=(8, 0))
+
+        tk.Label(win, text="Instruction:", font=("Arial", 9), bg="#0e1117", fg="#cccccc").pack(anchor="w", padx=20)
+        groq_instr = tk.Text(win, height=2, bg="#1e2130", fg="white",
+                             font=("Consolas", 9), relief="flat",
+                             insertbackground="white", wrap="word")
+        groq_instr.pack(fill="x", padx=20, pady=(2, 4))
+        groq_instr.insert("1.0", 'e.g. Rename Russia to Great North')
+
+        groq_result_lbl = tk.Label(win, text="",
+                                   font=("Arial", 9), bg="#0e1117", fg="#00ff90",
+                                   wraplength=540, justify="center")
+        groq_result_lbl.pack(pady=(0, 4))
+
+        def _do_groq_action():
+            action_key = _action_key_map.get(_groq_action_var.get(), "rename_place")
+            details = groq_instr.get("1.0", tk.END).strip()
+            if not details:
+                groq_result_lbl.config(text="Enter an instruction first.", fg="#ff4444")
+                return
+            try:
+                command = self.groq_engine.build_command(action_key, details)
+                result  = self.groq_engine.execute_command(self, command)
+                groq_result_lbl.config(text=result, fg="#00ff90")
+                self.log_event(f"[Groq] {result}")
+                self.update_status()
+            except Exception as exc:
+                groq_result_lbl.config(text=str(exc), fg="#ff4444")
+
+        tk.Button(win, text="Execute Groq Action",
+                  font=("Arial", 10, "bold"), bg="#1e3a6e", fg="white",
+                  activebackground="#2e4a7e", relief="flat", padx=16, pady=6,
+                  command=_do_groq_action).pack(pady=(0, 8))
 
         tk.Frame(win, bg="#884400", height=5).pack(fill="x", side="bottom")
 
@@ -678,15 +753,20 @@ class ElectionsMixin:
         def _do_call():
             import time
             time.sleep(1.2)   # deliberate pause for review feel
-            try:
+            data = None
+            groq_error = None
+            if getattr(self, "groq_engine", None) and self.groq_engine.get_api_key_status():
+                try:
+                    data = self.groq_engine.review_executive_order(order_text)
+                except Exception as _ge:
+                    groq_error = str(_ge)
+            if data is None:
                 data = _parse_executive_order(order_text)
-                self.root.after(
-                    0, lambda: self._handle_order_response(
-                        data, status_var, status_lbl, sign_btn, win))
-            except Exception as e:
-                self.root.after(0, lambda err=str(e): self._order_error(
-                    f"Parser error: {err}", status_var, status_lbl, sign_btn))
-
+                if groq_error:
+                    self.root.after(0, lambda e=groq_error: self.log_event(f"[Groq fallback] {e}"))
+            self.root.after(
+                0, lambda: self._handle_order_response(
+                    data, status_var, status_lbl, sign_btn, win))
         threading.Thread(target=_do_call, daemon=True).start()
 
     def _handle_order_response(self, data, status_var, status_lbl, sign_btn, win):
@@ -730,3 +810,11 @@ class ElectionsMixin:
         status_var.set(msg)
         status_lbl.config(fg="#ff4444")
         sign_btn.config(state="normal", text="✍️  Sign Executive Order")
+
+    def _set_groq_api_key(self):
+        key = self._groq_api_key_var.get().strip()
+        if not getattr(self, "groq_engine", None):
+            self.groq_engine = GroqOrdersEngine()
+        self.groq_engine.set_api_key(key)
+        status = "Groq key loaded. Executive orders will be reviewed by Groq AI." if self.groq_engine.get_api_key_status() else "Groq key not set. Using local parser fallback."
+        self._groq_key_status_label.config(text=status)

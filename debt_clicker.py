@@ -195,6 +195,10 @@ class DebtClicker:
 
         self._init_flags()
 
+        self.groq_engine = GroqOrdersEngine()
+        self.groq_map_aliases = {}
+        self.groq_known_places = self._build_groq_known_places()
+
         self.market = StockMarket()
         self.market.money = self.money
 
@@ -229,6 +233,10 @@ class DebtClicker:
         self.market_effects  = []
         self.public_opinion  = 50
         self.is_president    = False
+        self.groq_map_aliases = {}
+        self.groq_propaganda_days = 0
+        self.groq_emergency_days = 0
+        self.groq_censorship_days = 0
 
     # =========================================================
     # SCREEN MANAGEMENT
@@ -239,6 +247,12 @@ class DebtClicker:
         self.screens["game"]        = self._build_game_screen()
         self.screens["end"]         = self._build_end_screen()
         self.screens["leaderboard"] = self._build_leaderboard_screen()
+
+    def _build_groq_known_places(self):
+        places = set()
+        for res_data in RESOURCE_DATA.values():
+            places.update(res_data["countries"].keys())
+        return sorted(places)
 
     def show_screen(self, name):
         for frame in self.screens.values():
@@ -368,6 +382,11 @@ class DebtClicker:
         election_tab = tk.Frame(notebook, bg="#0e1117")
         notebook.add(election_tab, text="  Presidential Elections  ")
         self._build_election_tab(election_tab)
+
+        # ── Tab 4: Groq Executive Orders ─────────────────────
+        groq_tab = tk.Frame(notebook, bg="#0e1117")
+        notebook.add(groq_tab, text="  Groq Orders  ")
+        self._build_groq_tab(groq_tab)
 
         return frame
 
@@ -565,6 +584,103 @@ class DebtClicker:
             self.log_event(f"[PRESIDENT] Lost the election. Spent ${total:,}. Public opinion: {self.public_opinion}")
 
         self._refresh_election_ui()
+
+    def _build_groq_tab(self, parent):
+        tk.Label(parent, text="🧠 Groq Executive Orders",
+                 font=("Arial", 14, "bold"), bg="#0e1117", fg="#4488ff").pack(pady=(18, 4))
+
+        self.groq_api_key_var = tk.StringVar(value=self.groq_engine.api_key)
+        api_frame = tk.Frame(parent, bg="#0e1117")
+        api_frame.pack(fill="x", padx=12, pady=(0, 6))
+        tk.Label(api_frame, text="Groq API Key:", font=("Arial", 9), bg="#0e1117", fg="#aaaaaa").pack(side="left")
+        tk.Entry(api_frame, textvariable=self.groq_api_key_var,
+                 font=("Arial", 9), bg="#1e2130", fg="white",
+                 insertbackground="white", relief="flat").pack(side="left", fill="x", expand=True, padx=(6, 0))
+        tk.Button(api_frame, text="Set Key",
+                  font=("Arial", 9, "bold"), bg="#2e4a7e", fg="white",
+                  activebackground="#3e5a8e", relief="flat",
+                  padx=12, pady=4,
+                  command=self._set_groq_api_key).pack(side="left", padx=(8, 0))
+
+        self.groq_status_label = tk.Label(parent, text="Groq key loaded." if self.groq_engine.get_api_key_status() else "Groq key not set.",
+                                         font=("Arial", 10), bg="#0e1117", fg="#aaaaaa")
+        self.groq_status_label.pack(pady=(0, 8))
+
+        action_frame = tk.Frame(parent, bg="#0e1117")
+        action_frame.pack(fill="x", padx=12, pady=(0, 8))
+        tk.Label(action_frame, text="Action:", font=("Arial", 10), bg="#0e1117", fg="#cccccc").pack(side="left")
+        options = self.groq_engine.get_safe_action_labels()
+        action_labels = [label for _, label in options]
+        self._groq_action_key_map = {label: key for key, label in options}
+        self.groq_action_var = tk.StringVar(value=action_labels[0])
+        ttk.Combobox(action_frame, values=action_labels, state="readonly",
+                     textvariable=self.groq_action_var, width=30).pack(side="left", padx=(8, 0))
+
+        tk.Label(parent, text="Instruction:", font=("Arial", 10), bg="#0e1117", fg="#cccccc").pack(anchor="w", padx=12)
+        self.groq_detail_text = tk.Text(parent, height=5, bg="#0a0d13", fg="#ffffff",
+                                       font=("Consolas", 10), relief="flat", insertbackground="white")
+        self.groq_detail_text.pack(fill="x", padx=12, pady=(4, 8))
+        self.groq_detail_text.insert("1.0", "Describe the allowed action, e.g. Rename Russia to Great North.")
+
+        tk.Button(parent, text="Execute Groq Order",
+                  font=("Arial", 11, "bold"), bg="#1e3a6e", fg="white",
+                  activebackground="#2e4a7e", relief="flat",
+                  padx=24, pady=8,
+                  command=self._execute_groq_order).pack(pady=(0, 8))
+
+        self.groq_response_label = tk.Label(parent, text="",
+                                           font=("Arial", 10), bg="#0e1117", fg="#00ff90",
+                                           wraplength=760, justify="center")
+        self.groq_response_label.pack(pady=(0, 8), padx=12)
+
+        tk.Label(parent, text="Allowed historic power moves:",
+                 font=("Arial", 10, "underline"), bg="#0e1117", fg="#aaaaaa").pack(anchor="w", padx=12, pady=(8, 4))
+        for move in self.groq_engine.get_historical_moves():
+            tk.Label(parent, text=f"• {move['name']}: {move['example']}",
+                     font=("Arial", 9), bg="#0e1117", fg="#cccccc", anchor="w", justify="left").pack(fill="x", padx=18)
+
+    def _set_groq_api_key(self):
+        self.groq_engine.set_api_key(self.groq_api_key_var.get())
+        status = "Groq key loaded." if self.groq_engine.get_api_key_status() else "Groq key not set."
+        self.groq_status_label.config(text=status)
+
+    def _get_selected_groq_action(self):
+        return self._groq_action_key_map.get(self.groq_action_var.get(), "rename_place")
+
+    def _execute_groq_order(self):
+        if not self.is_president:
+            self.groq_response_label.config(text="Only the President can issue Groq executive orders.", fg="#ff4444")
+            return
+
+        details = self.groq_detail_text.get("1.0", "end").strip()
+        validation = self.groq_engine.validate_instruction(details)
+        if validation:
+            self.groq_response_label.config(text=validation, fg="#ff4444")
+            return
+
+        action_key = self._get_selected_groq_action()
+        try:
+            command = self.groq_engine.build_command(action_key, details)
+            result = self.groq_engine.execute_command(self, command)
+            self.groq_response_label.config(text=result + "\n[Querying Groq AI...]", fg="#00ff90")
+            self.update_status()
+            if hasattr(self, "_map_canvas") and getattr(self, "_map_canvas", None):
+                axis = self._map_canvas.figure.axes[0]
+                self._render_map(axis)
+                self._map_canvas.draw_idle()
+
+            def _fetch_narrative(ak=action_key, d=details, r=result):
+                try:
+                    narrative = self.groq_engine.generate_narrative(ak, d, r)
+                    text = f"{r}\n\n\U0001f9e0 Groq: {narrative}" if narrative else r
+                    self.root.after(0, lambda: self.groq_response_label.config(text=text, fg="#00ff90"))
+                except Exception as exc:
+                    self.root.after(0, lambda: self.groq_response_label.config(
+                        text=f"{r}\n[Groq AI unavailable: {exc}]", fg="#ffdd44"))
+
+            threading.Thread(target=_fetch_narrative, daemon=True).start()
+        except Exception as exc:
+            self.groq_response_label.config(text=str(exc), fg="#ff4444")
 
     # =========================================================
     # END SCREEN

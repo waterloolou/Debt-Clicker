@@ -410,6 +410,7 @@ class WorldMapMixin:
         # ── Label ALL countries ───────────────────────────────────────
         for _, row in world.iterrows():
             cname = row["NAME"]
+            display_name = getattr(self, "groq_map_aliases", {}).get(cname, cname)
             if not row.geometry or row.geometry.is_empty:
                 continue
             cx = row.geometry.centroid.x
@@ -426,7 +427,7 @@ class WorldMapMixin:
                 lclr, suffix = country_label_clr[cname], ""
             else:
                 lclr, suffix = "#5a5a5a", ""
-            ax.text(cx, cy, cname + suffix,
+            ax.text(cx, cy, display_name + suffix,
                     color=lclr, fontsize=4.2, ha="center", va="center",
                     zorder=6,
                     path_effects=[pe.withStroke(linewidth=1.0, foreground=CLR_OCEAN)])
@@ -502,11 +503,16 @@ class WorldMapMixin:
                 rival_controls[res_name] = rv
 
         popup = tk.Toplevel(self.root)
-        popup.title(name)
+        display_name = getattr(self, "groq_map_aliases", {}).get(name, name)
+        popup.title(display_name)
         popup.configure(bg="#0e1117")
         popup.geometry("560x520")
         popup.grab_set()
         popup.resizable(False, True)
+
+        if display_name != name:
+            tk.Label(popup, text=f"{display_name} ({name})",
+                     font=("Arial", 11, "italic"), bg="#0e1117", fg="#999999").pack(pady=(4, 0))
 
         # ── Header ────────────────────────────────────────────────
         tk.Label(popup, text=name,
