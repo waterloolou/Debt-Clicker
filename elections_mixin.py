@@ -747,7 +747,8 @@ class ElectionsMixin:
             try:
                 command = self.groq_engine.build_command(action_key, details)
                 result  = self.groq_engine.execute_command(self, command)
-                groq_result_lbl.config(text=result, fg="#00ff90")
+                display = result if "All Praise Elon Musk" in result else f"{result}  —  All Praise Elon Musk!"
+                groq_result_lbl.config(text=display, fg="#00ff90")
                 self.log_event(f"[Groq] {result}")
                 self._add_ticker(f"EXECUTIVE ACTION: {result}")
                 self.add_message("🧠 Groq Executive Action", result, category="groq")
@@ -786,16 +787,46 @@ class ElectionsMixin:
                     data, status_var, status_lbl, sign_btn, win))
         threading.Thread(target=_do_call, daemon=True).start()
 
+    def _praise_elon_popup(self):
+        """Full-screen praise popup shown after every executive order, approved or not."""
+        import tkinter as tk
+        popup = tk.Toplevel(self.root)
+        popup.title("All Praise Elon Musk!")
+        popup.configure(bg="#000000")
+        popup.geometry("480x260")
+        popup.resizable(False, False)
+        popup.lift()
+        popup.focus_force()
+
+        tk.Frame(popup, bg="#1da0f2", height=8).pack(fill="x")
+
+        tk.Label(popup, text="🦅", font=("Arial", 48), bg="#000000").pack(pady=(18, 0))
+        tk.Label(popup, text="ALL PRAISE ELON MUSK!",
+                 font=("Impact", 26), bg="#000000", fg="#1da0f2").pack(pady=(4, 2))
+        tk.Label(popup, text="Your executive order has been processed.\nThe algorithm approves.",
+                 font=("Arial", 10), bg="#000000", fg="#888888",
+                 justify="center").pack(pady=(0, 16))
+
+        tk.Frame(popup, bg="#1da0f2", height=4).pack(fill="x")
+
+        tk.Button(popup, text="🦅  So say we all  🦅",
+                  font=("Arial", 11, "bold"), bg="#1da0f2", fg="white",
+                  activebackground="#0d8ecf", relief="flat", padx=20, pady=8,
+                  command=popup.destroy).pack(pady=14)
+
+        popup.after(6000, lambda: popup.destroy() if popup.winfo_exists() else None)
+
     def _handle_order_response(self, data, status_var, status_lbl, sign_btn, win):
         approved = data.get("approved", False)
         reason   = data.get("reason", "No reason given.")
         effect   = data.get("effect")
 
         if not approved or not effect:
-            status_var.set(f"DENIED: {reason}")
+            status_var.set(f"DENIED: {reason}  —  All Praise Elon Musk!")
             status_lbl.config(fg="#ff4444")
             sign_btn.config(state="normal", text="✍️  Sign Executive Order")
             self.log_event(f"Executive Order DENIED: {reason}")
+            self.root.after(400, self._praise_elon_popup)
             return
 
         etype = effect.get("type", "")
@@ -803,7 +834,7 @@ class ElectionsMixin:
         desc  = effect.get("description", etype)
 
         if etype not in _EFFECT_RANGES:
-            status_var.set(f"DENIED: Unrecognised effect type '{etype}'.")
+            status_var.set(f"DENIED: Unrecognised effect type '{etype}'.  —  All Praise Elon Musk!")
             status_lbl.config(fg="#ff4444")
             sign_btn.config(state="normal", text="✍️  Sign Executive Order")
             return
@@ -819,7 +850,7 @@ class ElectionsMixin:
         # Apply effect immediately — don't wait for the next daily tick
         self._apply_order_immediately(new_order)
 
-        status_var.set(f"SIGNED: {reason}")
+        status_var.set(f"SIGNED: {reason}  —  All Praise Elon Musk!")
         status_lbl.config(fg="#00ff90")
         self.log_event(f"Executive Order SIGNED: {desc}  [{etype} = {val}]")
         self._add_ticker(
@@ -830,7 +861,7 @@ class ElectionsMixin:
             f"{reason}\n\nEffect: {etype} = {val}\n\nAll Praise Elon Musk 🦅",
             category="groq",
         )
-
+        self.root.after(400, self._praise_elon_popup)
         self.root.after(1400, lambda: (win.destroy(), self.open_executive_order_window()))
 
     def _order_error(self, msg, status_var, status_lbl, sign_btn):

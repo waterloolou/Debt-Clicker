@@ -368,7 +368,14 @@ class DebtMixin:
 
                 exec_mult = getattr(self, "get_executive_loan_rate_multiplier",
                                     lambda: 1.0)()
-                adj_rate  = adj_rate * exec_mult
+                is_pres   = getattr(self, "game_mode", "billionaire") == "president"
+                pres_mult = 3.0 if (is_pres and opt["amount"] >= 300_000_000) else 1.0
+                adj_rate  = adj_rate * exec_mult * pres_mult
+
+                if is_pres and opt["amount"] >= 300_000_000:
+                    tk.Label(info,
+                             text="⚠ PRESIDENTIAL MODE: 3× interest rate. Default = national crisis.",
+                             font=("Arial", 7, "bold"), bg="#1e2130", fg="#ff4444").pack(anchor="w")
 
                 def take(o=opt, b=bank, adj=adj_rate, w=win):
                     if not hasattr(self, "loans"):
@@ -477,18 +484,45 @@ class DebtMixin:
 
     def _apply_loan_default(self, loan):
         """Apply default penalties and update credit history for one loan."""
-        penalty = max(0, self.money * 0.25)
+        is_pres     = getattr(self, "game_mode", "billionaire") == "president"
+        large_loan  = loan.get("amount", 0) >= 300_000_000
+
+        if is_pres and large_loan:
+            penalty_pct = 0.60
+        else:
+            penalty_pct = 0.25
+
+        penalty = max(0, self.money * penalty_pct)
         self.money -= penalty
         self.market.money = self.money
 
         self.loan_defaults = getattr(self, "loan_defaults", 0) + 1
         bank_name = loan.get("bank", "Unknown")
 
-        self.log_event(
-            f"LOAN DEFAULT ({bank_name})! Lost ${penalty:,.0f} (25% penalty). "
-            f"${loan['remaining']:,.0f} written off. Credit score hit.")
-        self.add_transgression(10, 8)
-        self._add_ticker("BREAKING: Debt default — creditors seize assets!")
+        if is_pres and large_loan:
+            opinion_hit = 50
+            trans_hit   = 80
+            self.public_opinion = max(0, self.public_opinion - opinion_hit)
+            self.add_transgression(trans_hit, 30)
+            self.log_event(
+                f"🚨 NATIONAL DEBT CRISIS ({bank_name})! "
+                f"Lost ${penalty:,.0f} (60% seizure). "
+                f"Public opinion −{opinion_hit}. Transgressions +{trans_hit}.")
+            self._add_ticker("BREAKING: Government defaults on sovereign debt — markets in freefall!")
+            self.add_message(
+                "National Debt Crisis",
+                f"Your government has defaulted on a ${loan['amount']:,.0f} loan from {bank_name}.\n\n"
+                f"International creditors have seized 60% of state assets.\n"
+                f"Public approval has collapsed −{opinion_hit}% and transgressions surged +{trans_hit}.\n\n"
+                f"The IMF has issued a formal warning. Your presidency is in jeopardy.",
+                "legal",
+            )
+        else:
+            self.add_transgression(10, 8)
+            self.log_event(
+                f"LOAN DEFAULT ({bank_name})! Lost ${penalty:,.0f} (25% penalty). "
+                f"${loan['remaining']:,.0f} written off. Credit score hit.")
+            self._add_ticker("BREAKING: Debt default — creditors seize assets!")
 
         # Blacklist from this bank if it has that policy
         bank_data = next((b for b in BANKS if b["name"] == bank_name), None)

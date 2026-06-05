@@ -133,13 +133,40 @@ def _safe_text(text: str) -> str:
 
 
 def _extract_rename(details: str) -> Optional[Tuple[str, str]]:
-    details = details.strip()
-    match = re.search(r"rename\s+['\"]?([^'\"]+)['\"]?\s+to\s+['\"]?([^'\"]+)['\"]?", details, re.IGNORECASE)
-    if match:
-        return _safe_text(match.group(1)), _safe_text(match.group(2))
-    parts = details.split(" to ", 1)
-    if len(parts) == 2:
-        return _safe_text(parts[0]), _safe_text(parts[1])
+    """
+    Accept many natural phrasings, e.g.:
+      "Rename Russia to Great North"
+      "Call Libya The Red Coast"
+      "Change Iraq's name to New Babylon"
+      "Russia → Grand East"
+      "Russia is now Putinland"
+      "Venezuela should be called El Dorado"
+      "Iraq = Mesopotamia Prime"
+    Returns (original, new_name) or None.
+    """
+    s = details.strip()
+
+    patterns = [
+        # rename X to Y  /  change X to Y  /  set X to Y
+        r"(?:rename|change|set)\s+['\"]?(.+?)['\"]?(?:'s\s+name)?\s+to\s+['\"]?(.+?)['\"]?$",
+        # call X Y
+        r"call\s+['\"]?(.+?)['\"]?\s+['\"]?(.+?)['\"]?$",
+        # X should be called Y  /  X is now Y  /  X will be Y
+        r"['\"]?(.+?)['\"]?\s+(?:should\s+be\s+called|is\s+now|will\s+be|becomes?)\s+['\"]?(.+?)['\"]?$",
+        # X → Y  or  X -> Y  or  X => Y
+        r"['\"]?(.+?)['\"]?\s*(?:→|->|=>)\s*['\"]?(.+?)['\"]?$",
+        # X = Y
+        r"['\"]?(.+?)['\"]?\s*=\s*['\"]?(.+?)['\"]?$",
+        # bare fallback: X to Y
+        r"['\"]?(.+?)['\"]?\s+to\s+['\"]?(.+?)['\"]?$",
+    ]
+
+    for pat in patterns:
+        m = re.search(pat, s, re.IGNORECASE)
+        if m:
+            orig, new = _safe_text(m.group(1)), _safe_text(m.group(2))
+            if orig and new and orig.lower() != new.lower():
+                return orig, new
     return None
 
 
@@ -211,7 +238,10 @@ class GroqOrdersEngine:
         if action_key == "rename_place":
             result = _extract_rename(details)
             if not result:
-                raise ValueError("Enter a rename instruction like: Rename Russia to Great North.")
+                raise ValueError(
+                    "Couldn't parse that. Try: 'Russia → Great North', "
+                    "'Call Libya The Red Coast', or 'Iraq is now New Babylon'."
+                )
             return {"action": action_key, "target": result[0], "new_name": result[1]}
         if action_key in ("pass_infrastructure_legislation", "pass_corporate_tax_cut", "censor_media"):
             return {"action": action_key, "details": details}
@@ -307,7 +337,7 @@ class GroqOrdersEngine:
         game.market.money = game.money
         game.public_opinion = max(0, min(100, game.public_opinion + SAFE_GROQ_ACTIONS["rename_place"]["public_opinion"]))
         self._record_command(command)
-        return f"Groq renamed {resolved} to '{new_name}'."
+        return f"Groq renamed {resolved} to '{new_name}'.  —  All Praise Elon Musk!"
 
     def _execute_infrastructure_bill(self, game: Any, command: Dict[str, Any]) -> str:
         spec = SAFE_GROQ_ACTIONS["pass_infrastructure_legislation"]
@@ -318,7 +348,7 @@ class GroqOrdersEngine:
         game.public_opinion = min(100, game.public_opinion + spec["public_opinion"])
         game.apply_market_effect(["Energy", "Retail"], 1.04, 4, "Infrastructure spending")
         self._record_command(command)
-        return "Groq passed a major infrastructure bill. Energy and Retail markets are stronger for a short time."
+        return "Groq passed a major infrastructure bill. Energy and Retail markets are stronger for a short time.  —  All Praise Elon Musk!"
 
     def _execute_tax_cut(self, game: Any, command: Dict[str, Any]) -> str:
         spec = SAFE_GROQ_ACTIONS["pass_corporate_tax_cut"]
@@ -329,7 +359,7 @@ class GroqOrdersEngine:
         game.public_opinion = max(0, game.public_opinion + spec["public_opinion"])
         game.apply_market_effect(["Finance", "Technology"], 1.05, 3, "Corporate tax cut")
         self._record_command(command)
-        return "Groq passed a corporate tax cut that boosts Finance and Technology markets while making the public a little nervous."
+        return "Groq passed a corporate tax cut that boosts Finance and Technology markets while making the public a little nervous.  —  All Praise Elon Musk!"
 
     def _execute_appoint_loyalist(self, game: Any, command: Dict[str, Any]) -> str:
         spec = SAFE_GROQ_ACTIONS["appoint_loyalist_official"]
@@ -341,7 +371,7 @@ class GroqOrdersEngine:
         game.transgressions += 2
         game.apply_market_effect(["Finance"], 1.03, 3, "Loyal appointment")
         self._record_command(command)
-        return "Groq installed a loyal official, increasing defense against future opposition while creating a small legitimacy cost."
+        return "Groq installed a loyal official, increasing defense against future opposition while creating a small legitimacy cost.  —  All Praise Elon Musk!"
 
     def _execute_propaganda(self, game: Any, command: Dict[str, Any]) -> str:
         spec = SAFE_GROQ_ACTIONS["launch_propaganda_campaign"]
@@ -352,7 +382,7 @@ class GroqOrdersEngine:
         game.public_opinion = min(100, game.public_opinion + spec["public_opinion"])
         game.groq_propaganda_days = getattr(game, "groq_propaganda_days", 0) + 3
         self._record_command(command)
-        return "Groq launched a propaganda push. Public opinion rises, but the campaign will have compounding consequences if used too often."
+        return "Groq launched a propaganda push. Public opinion rises, but the campaign will have compounding consequences if used too often.  —  All Praise Elon Musk!"
 
     def _execute_emergency(self, game: Any, command: Dict[str, Any]) -> str:
         spec = SAFE_GROQ_ACTIONS["declare_state_of_emergency"]
@@ -361,7 +391,7 @@ class GroqOrdersEngine:
         game.groq_emergency_days = getattr(game, "groq_emergency_days", 0) + 3
         game.apply_market_effect(["Defense"], 1.05, 3, "State of emergency")
         self._record_command(command)
-        return "Groq declared an emergency, tightening control and boosting defense markets at the cost of long-term legitimacy."
+        return "Groq declared an emergency, tightening control and boosting defense markets at the cost of long-term legitimacy.  —  All Praise Elon Musk!"
 
     def _execute_sanctions(self, game: Any, command: Dict[str, Any]) -> str:
         spec = SAFE_GROQ_ACTIONS["impose_sanctions"]
@@ -373,7 +403,7 @@ class GroqOrdersEngine:
         game.public_opinion = min(100, game.public_opinion + spec["public_opinion"])
         game.apply_market_effect([target], 0.92, 4, f"Sanctions on {target}")
         self._record_command(command)
-        return f"Groq imposed sanctions on {target}, weakening that sector while rallying national pride."
+        return f"Groq imposed sanctions on {target}, weakening that sector while rallying national pride.  —  All Praise Elon Musk!"
 
     def _execute_censor_media(self, game: Any, command: Dict[str, Any]) -> str:
         spec = SAFE_GROQ_ACTIONS["censor_media"]
@@ -385,7 +415,7 @@ class GroqOrdersEngine:
         game.transgressions += 5
         game.groq_censorship_days = getattr(game, "groq_censorship_days", 0) + 3
         self._record_command(command)
-        return "Groq restricted dissenting coverage, temporarily shielding you from bad headlines."
+        return "Groq restricted dissenting coverage, temporarily shielding you from bad headlines.  —  All Praise Elon Musk!"
 
     def run_safety_audit(self) -> List[str]:
         errors: List[str] = []

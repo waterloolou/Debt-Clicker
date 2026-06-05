@@ -78,16 +78,17 @@ class MessagesMixin:
 
     def _build_inbox_button(self, parent) -> tk.Frame:
         """Return a frame containing the inbox button + badge. Pack it yourself."""
-        container = tk.Frame(parent, bg="#0e1117")
+        container = tk.Frame(parent, bg="#0e1117", width=104, height=104)
+        container.pack_propagate(False)
 
         btn = tk.Button(
             container, text="✉",
-            font=("Arial", 16), bg="#0e1117", fg="#aaaaaa",
+            font=("Arial", 32), bg="#0e1117", fg="#aaaaaa",
             activebackground="#0e1117", activeforeground="#00ff90",
             relief="flat", bd=0, cursor="hand2",
             command=self.open_inbox,
         )
-        btn.pack()
+        btn.pack(fill="both", expand=True)
 
         self._inbox_badge = tk.Label(
             container, text="", font=("Arial", 7, "bold"),

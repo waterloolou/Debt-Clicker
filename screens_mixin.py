@@ -493,7 +493,6 @@ class ScreensMixin:
         btn_frame.pack(pady=(0, 4))
 
         for text, cmd in [
-            ("Work",         self.work),
             ("Casino",       self.open_casino),
             ("Stock Market", self.open_stock_market),
             ("Assets",       self.open_assets),
@@ -514,14 +513,14 @@ class ScreensMixin:
         _sec_btns = [
             ("Lobby",          self.open_lobby),
             ("Black Market",   self.open_black_market),
-            ("Debt",           self.open_debt_window),
             ("Rivals",         self.open_rivals_window),
             ("Net Worth",      self.open_net_worth_graph),
-            ("Alliance",       self.open_alliance_window),
             ("🗳️ Elections",   self.open_elections_window),
             ("📜 Exec. Order", self.open_executive_order_window),
             ("💾 Save",        self.open_save_menu),
         ]
+        if getattr(self, "game_mode", "billionaire") != "billionaire":
+            _sec_btns.insert(2, ("Debt", self.open_debt_window))
         if getattr(self, "is_multiplayer", False):
             _sec_btns += [
                 ("💬 Chat",     self.open_chat_window),

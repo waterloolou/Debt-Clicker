@@ -401,37 +401,6 @@ class WorldMapMixin:
             if not df.empty:
                 df.plot(ax=ax, color=clr, edgecolor=edge, linewidth=lw, aspect=None)
 
-        # ── Build lookup: country → (edge_color, suffix) for labels ──
-        # Dominant resource edge color per country
-        country_label_clr = {}
-        for res_name in reversed(RESOURCE_PRIORITY):   # reverse so highest priority wins
-            for cname in RESOURCE_DATA[res_name]["countries"]:
-                country_label_clr[cname] = RESOURCE_DATA[res_name]["clr"][1]
-
-        # ── Label ALL countries ───────────────────────────────────────
-        for _, row in world.iterrows():
-            cname = row["NAME"]
-            display_name = getattr(self, "groq_map_aliases", {}).get(cname, cname)
-            if not row.geometry or row.geometry.is_empty:
-                continue
-            cx = row.geometry.centroid.x
-            cy = row.geometry.centroid.y
-            if cname == home:
-                lclr, suffix = "#5599ff", " ★"
-            elif cname in coup_names:
-                lclr, suffix = CLR_COUP_E, " ✦"
-            elif cname in bombed_names:
-                lclr, suffix = "#ff4444", " ✦"
-            elif cname in ally_countries:
-                lclr, suffix = CLR_ALLY_E, " ♦"
-            elif cname in country_label_clr:
-                lclr, suffix = country_label_clr[cname], ""
-            else:
-                lclr, suffix = "#5a5a5a", ""
-            ax.text(cx, cy, display_name + suffix,
-                    color=lclr, fontsize=4.2, ha="center", va="center",
-                    zorder=6,
-                    path_effects=[pe.withStroke(linewidth=1.0, foreground=CLR_OCEAN)])
 
         # ── Markers for special states ────────────────────────────────
         for _, row in world[occupied_mask].iterrows():
@@ -672,33 +641,78 @@ class WorldMapMixin:
                  font=("Impact", 13), bg="#0e1117", fg="#888888").pack(
                  anchor="w", padx=16, pady=(0, 4))
 
-        # Trade Route
-        tr_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
-        tr_f.pack(fill="x", padx=12, pady=3)
-        tk.Label(tr_f, text="📦  Establish Trade Route",
-                 font=("Arial", 10, "bold"), bg="#141920", fg="#00cc88").pack(anchor="w")
-        tk.Label(tr_f,
-                 text="Legal commerce deal.  $10M setup.  $500K/day for 15 days.  No penalties.",
-                 font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
-        trade_active = any(o["country"] == name and o.get("resource") == "Trade"
-                           for o in self.oil_operations)
-        if trade_active:
-            tk.Label(tr_f, text="✓ Trade route already active.",
-                     font=("Arial", 8, "italic"), bg="#141920", fg="#00ff90").pack(anchor="w")
-        elif is_ally:
-            tk.Label(tr_f, text="✓ Alliance provides automatic trade benefits.",
-                     font=("Arial", 8, "italic"), bg="#141920", fg=CLR_ALLY_E).pack(anchor="w")
-        else:
-            can_tr = self.money >= 10_000_000
-            tk.Button(tr_f, text="Establish Trade Route  —  $10,000,000",
+        if getattr(self, "game_mode", "billionaire") == "billionaire":
+            # ── Bribe Leader ──────────────────────────────────────────
+            bl_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            bl_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(bl_f, text="💰  Bribe Leader",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#ffcc00").pack(anchor="w")
+            tk.Label(bl_f,
+                     text="Pay off the government.  $25M.  +5 public opinion.  −10 transgressions.",
+                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+            can_bl = self.money >= 25_000_000
+            tk.Button(bl_f, text="Bribe Leader  —  $25,000,000",
                       font=("Arial", 9, "bold"),
-                      bg="#006644" if can_tr else "#2a2a2a",
-                      fg="white" if can_tr else "#555",
+                      bg="#886600" if can_bl else "#2a2a2a",
+                      fg="white" if can_bl else "#555",
                       relief="flat", padx=10, pady=4,
-                      state="normal" if can_tr else "disabled",
+                      state="normal" if can_bl else "disabled",
                       command=lambda p=popup:
-                          self._establish_trade_route(name, p, ax, canvas)
+                          self._bribe_leader(name, p)
                       ).pack(anchor="w", pady=(4, 0))
+
+            # ── Set Up Factory ────────────────────────────────────────
+            sf_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            sf_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(sf_f, text="🏭  Set Up Factory",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#00aaff").pack(anchor="w")
+            tk.Label(sf_f,
+                     text="Build a local manufacturing plant.  $20M.  $1M/day for 20 days.",
+                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+            factory_active = any(o["country"] == name and o.get("resource") == "Factory"
+                                 for o in self.oil_operations)
+            if factory_active:
+                tk.Label(sf_f, text="✓ Factory already operating here.",
+                         font=("Arial", 8, "italic"), bg="#141920", fg="#00ff90").pack(anchor="w")
+            else:
+                can_sf = self.money >= 20_000_000
+                tk.Button(sf_f, text="Set Up Factory  —  $20,000,000",
+                          font=("Arial", 9, "bold"),
+                          bg="#004488" if can_sf else "#2a2a2a",
+                          fg="white" if can_sf else "#555",
+                          relief="flat", padx=10, pady=4,
+                          state="normal" if can_sf else "disabled",
+                          command=lambda p=popup:
+                              self._setup_country_factory(name, p, ax, canvas)
+                          ).pack(anchor="w", pady=(4, 0))
+        else:
+            # Trade Route (president mode)
+            tr_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            tr_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(tr_f, text="📦  Establish Trade Route",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#00cc88").pack(anchor="w")
+            tk.Label(tr_f,
+                     text="Legal commerce deal.  $10M setup.  $500K/day for 15 days.  No penalties.",
+                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+            trade_active = any(o["country"] == name and o.get("resource") == "Trade"
+                               for o in self.oil_operations)
+            if trade_active:
+                tk.Label(tr_f, text="✓ Trade route already active.",
+                         font=("Arial", 8, "italic"), bg="#141920", fg="#00ff90").pack(anchor="w")
+            elif is_ally:
+                tk.Label(tr_f, text="✓ Alliance provides automatic trade benefits.",
+                         font=("Arial", 8, "italic"), bg="#141920", fg=CLR_ALLY_E).pack(anchor="w")
+            else:
+                can_tr = self.money >= 10_000_000
+                tk.Button(tr_f, text="Establish Trade Route  —  $10,000,000",
+                          font=("Arial", 9, "bold"),
+                          bg="#006644" if can_tr else "#2a2a2a",
+                          fg="white" if can_tr else "#555",
+                          relief="flat", padx=10, pady=4,
+                          state="normal" if can_tr else "disabled",
+                          command=lambda p=popup:
+                              self._establish_trade_route(name, p, ax, canvas)
+                          ).pack(anchor="w", pady=(4, 0))
 
         # Lift Sanctions
         if name in self.sanctions:
@@ -724,115 +738,116 @@ class WorldMapMixin:
                           self._lift_sanctions(name, bc, p)
                       ).pack(anchor="w", pady=(4, 0))
 
-        # ── Covert Operations ─────────────────────────────────────────
-        tk.Frame(inner, bg="#333", height=1).pack(fill="x", padx=16, pady=8)
-        tk.Label(inner, text="COVERT OPERATIONS",
-                 font=("Impact", 13), bg="#0e1117", fg="#888888").pack(
-                 anchor="w", padx=16, pady=(0, 4))
+        # ── Covert Operations (president mode only) ───────────────────
+        if getattr(self, "game_mode", "billionaire") != "billionaire":
+            tk.Frame(inner, bg="#333", height=1).pack(fill="x", padx=16, pady=8)
+            tk.Label(inner, text="COVERT OPERATIONS",
+                     font=("Impact", 13), bg="#0e1117", fg="#888888").pack(
+                     anchor="w", padx=16, pady=(0, 4))
 
-        # Espionage
-        esp_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
-        esp_f.pack(fill="x", padx=12, pady=3)
-        tk.Label(esp_f, text="🕵  Espionage Mission  —  $15M",
-                 font=("Arial", 10, "bold"), bg="#141920", fg="#cc88ff").pack(anchor="w")
-        tk.Label(esp_f,
-                 text="If rival operates here: steal 3 days of their income + sabotage. +8 trans.\n"
-                      "Otherwise: sell intel for $3–8M bonus.",
-                 font=("Arial", 8), bg="#141920", fg="#666",
-                 justify="left").pack(anchor="w", pady=2)
-        can_esp = not is_home and self.money >= 15_000_000
-        tk.Button(esp_f, text="Send Spy  —  $15,000,000",
-                  font=("Arial", 9, "bold"),
-                  bg="#4a1a6a" if can_esp else "#2a2a2a",
-                  fg="white" if can_esp else "#555",
-                  relief="flat", padx=10, pady=4,
-                  state="normal" if can_esp else "disabled",
-                  command=lambda p=popup:
-                      self._espionage_mission(name, p, ax, canvas)
-                  ).pack(anchor="w", pady=(4, 0))
-
-        # Proxy War (only if rival controls a resource here)
-        if rival_controls and not is_home:
-            rv_str = ", ".join(set(rival_controls.values()))
-            pw_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
-            pw_f.pack(fill="x", padx=12, pady=3)
-            tk.Label(pw_f, text="⚔  Proxy War  —  $60M",
-                     font=("Arial", 10, "bold"), bg="#141920", fg="#ff6644").pack(anchor="w")
-            tk.Label(pw_f,
-                     text=f"Fund insurgents against {rv_str}'s operations here.\n"
-                          f"Removes all rival control from this country. +20 trans, -8 opinion.",
+            # Espionage
+            esp_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+            esp_f.pack(fill="x", padx=12, pady=3)
+            tk.Label(esp_f, text="🕵  Espionage Mission  —  $15M",
+                     font=("Arial", 10, "bold"), bg="#141920", fg="#cc88ff").pack(anchor="w")
+            tk.Label(esp_f,
+                     text="If rival operates here: steal 3 days of their income + sabotage. +8 trans.\n"
+                          "Otherwise: sell intel for $3–8M bonus.",
                      font=("Arial", 8), bg="#141920", fg="#666",
                      justify="left").pack(anchor="w", pady=2)
-            can_pw = self.money >= 60_000_000
-            tk.Button(pw_f, text="Fund Proxy War  —  $60,000,000",
+            can_esp = not is_home and self.money >= 15_000_000
+            tk.Button(esp_f, text="Send Spy  —  $15,000,000",
                       font=("Arial", 9, "bold"),
-                      bg="#5a1a1a" if can_pw else "#2a2a2a",
-                      fg="white" if can_pw else "#555",
+                      bg="#4a1a6a" if can_esp else "#2a2a2a",
+                      fg="white" if can_esp else "#555",
                       relief="flat", padx=10, pady=4,
-                      state="normal" if can_pw else "disabled",
+                      state="normal" if can_esp else "disabled",
                       command=lambda p=popup:
-                          self._proxy_war(name, p, ax, canvas)
+                          self._espionage_mission(name, p, ax, canvas)
                       ).pack(anchor="w", pady=(4, 0))
 
-        # Puppet Upgrade (only after a coup)
-        if is_occupied and action_name == "Stage a Coup":
-            pu_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
-            pu_f.pack(fill="x", padx=12, pady=3)
-            tk.Label(pu_f, text="👑  Install Puppet Government  —  $100M",
-                     font=("Arial", 10, "bold"), bg="#141920", fg="#ffdd44").pack(anchor="w")
-            tk.Label(pu_f,
-                     text="Install loyal regime. +10 days on operation. Income doubled. +10 trans.",
-                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
-            can_pu = self.money >= 100_000_000
-            tk.Button(pu_f, text="Install Puppet  —  $100,000,000",
-                      font=("Arial", 9, "bold"),
-                      bg="#5a4a00" if can_pu else "#2a2a2a",
-                      fg="white" if can_pu else "#555",
-                      relief="flat", padx=10, pady=4,
-                      state="normal" if can_pu else "disabled",
-                      command=lambda p=popup:
-                          self._install_puppet(name, p, ax, canvas)
-                      ).pack(anchor="w", pady=(4, 0))
+            # Proxy War (only if rival controls a resource here)
+            if rival_controls and not is_home:
+                rv_str = ", ".join(set(rival_controls.values()))
+                pw_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+                pw_f.pack(fill="x", padx=12, pady=3)
+                tk.Label(pw_f, text="⚔  Proxy War  —  $60M",
+                         font=("Arial", 10, "bold"), bg="#141920", fg="#ff6644").pack(anchor="w")
+                tk.Label(pw_f,
+                         text=f"Fund insurgents against {rv_str}'s operations here.\n"
+                              f"Removes all rival control from this country. +20 trans, -8 opinion.",
+                         font=("Arial", 8), bg="#141920", fg="#666",
+                         justify="left").pack(anchor="w", pady=2)
+                can_pw = self.money >= 60_000_000
+                tk.Button(pw_f, text="Fund Proxy War  —  $60,000,000",
+                          font=("Arial", 9, "bold"),
+                          bg="#5a1a1a" if can_pw else "#2a2a2a",
+                          fg="white" if can_pw else "#555",
+                          relief="flat", padx=10, pady=4,
+                          state="normal" if can_pw else "disabled",
+                          command=lambda p=popup:
+                              self._proxy_war(name, p, ax, canvas)
+                          ).pack(anchor="w", pady=(4, 0))
 
-        # Arms Deal (non-ally, non-occupied, non-home)
-        if not is_ally and not is_occupied and not is_home:
-            ad_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
-            ad_f.pack(fill="x", padx=12, pady=3)
-            tk.Label(ad_f, text="🔫  Arms Deal  —  net +$10M profit",
-                     font=("Arial", 10, "bold"), bg="#141920", fg="#ff4444").pack(anchor="w")
-            tk.Label(ad_f,
-                     text="Sell weapons. Requires $20M upfront. Returns $30M. +18 trans. Boosts Defense stocks.",
-                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
-            can_ad = self.money >= 20_000_000
-            tk.Button(ad_f, text="Deal Arms  —  $20M cost / $30M return",
-                      font=("Arial", 9, "bold"),
-                      bg="#5a0000" if can_ad else "#2a2a2a",
-                      fg="white" if can_ad else "#555",
-                      relief="flat", padx=10, pady=4,
-                      state="normal" if can_ad else "disabled",
-                      command=lambda p=popup:
-                          self._arms_deal(name, p, ax, canvas)
-                      ).pack(anchor="w", pady=(4, 0))
+            # Puppet Upgrade (only after a coup)
+            if is_occupied and action_name == "Stage a Coup":
+                pu_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+                pu_f.pack(fill="x", padx=12, pady=3)
+                tk.Label(pu_f, text="👑  Install Puppet Government  —  $100M",
+                         font=("Arial", 10, "bold"), bg="#141920", fg="#ffdd44").pack(anchor="w")
+                tk.Label(pu_f,
+                         text="Install loyal regime. +10 days on operation. Income doubled. +10 trans.",
+                         font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+                can_pu = self.money >= 100_000_000
+                tk.Button(pu_f, text="Install Puppet  —  $100,000,000",
+                          font=("Arial", 9, "bold"),
+                          bg="#5a4a00" if can_pu else "#2a2a2a",
+                          fg="white" if can_pu else "#555",
+                          relief="flat", padx=10, pady=4,
+                          state="normal" if can_pu else "disabled",
+                          command=lambda p=popup:
+                              self._install_puppet(name, p, ax, canvas)
+                          ).pack(anchor="w", pady=(4, 0))
 
-        # Foreign Aid (any country except home)
-        if not is_home:
-            fa_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
-            fa_f.pack(fill="x", padx=12, pady=3)
-            tk.Label(fa_f, text="🤲  Foreign Aid  —  $25M",
-                     font=("Arial", 10, "bold"), bg="#141920", fg="#00cc88").pack(anchor="w")
-            tk.Label(fa_f,
-                     text="+10 public opinion. -8 transgressions. Reduces sanction risk from this country.",
-                     font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
-            can_fa = self.money >= 25_000_000
-            tk.Button(fa_f, text="Send Foreign Aid  —  $25,000,000",
-                      font=("Arial", 9, "bold"),
-                      bg="#004a30" if can_fa else "#2a2a2a",
-                      fg="white" if can_fa else "#555",
-                      relief="flat", padx=10, pady=4,
-                      state="normal" if can_fa else "disabled",
-                      command=lambda p=popup:
-                          self._foreign_aid(name, p, ax, canvas)
-                      ).pack(anchor="w", pady=(4, 0))
+            # Arms Deal (non-ally, non-occupied, non-home)
+            if not is_ally and not is_occupied and not is_home:
+                ad_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+                ad_f.pack(fill="x", padx=12, pady=3)
+                tk.Label(ad_f, text="🔫  Arms Deal  —  net +$10M profit",
+                         font=("Arial", 10, "bold"), bg="#141920", fg="#ff4444").pack(anchor="w")
+                tk.Label(ad_f,
+                         text="Sell weapons. Requires $20M upfront. Returns $30M. +18 trans. Boosts Defense stocks.",
+                         font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+                can_ad = self.money >= 20_000_000
+                tk.Button(ad_f, text="Deal Arms  —  $20M cost / $30M return",
+                          font=("Arial", 9, "bold"),
+                          bg="#5a0000" if can_ad else "#2a2a2a",
+                          fg="white" if can_ad else "#555",
+                          relief="flat", padx=10, pady=4,
+                          state="normal" if can_ad else "disabled",
+                          command=lambda p=popup:
+                              self._arms_deal(name, p, ax, canvas)
+                          ).pack(anchor="w", pady=(4, 0))
+
+            # Foreign Aid (any country except home)
+            if not is_home:
+                fa_f = tk.Frame(inner, bg="#141920", padx=12, pady=10)
+                fa_f.pack(fill="x", padx=12, pady=3)
+                tk.Label(fa_f, text="🤲  Foreign Aid  —  $25M",
+                         font=("Arial", 10, "bold"), bg="#141920", fg="#00cc88").pack(anchor="w")
+                tk.Label(fa_f,
+                         text="+10 public opinion. -8 transgressions. Reduces sanction risk from this country.",
+                         font=("Arial", 8), bg="#141920", fg="#666").pack(anchor="w", pady=2)
+                can_fa = self.money >= 25_000_000
+                tk.Button(fa_f, text="Send Foreign Aid  —  $25,000,000",
+                          font=("Arial", 9, "bold"),
+                          bg="#004a30" if can_fa else "#2a2a2a",
+                          fg="white" if can_fa else "#555",
+                          relief="flat", padx=10, pady=4,
+                          state="normal" if can_fa else "disabled",
+                          command=lambda p=popup:
+                              self._foreign_aid(name, p, ax, canvas)
+                          ).pack(anchor="w", pady=(4, 0))
 
         tk.Button(popup, text="Close", bg="#1e2130", fg="white",
                   relief="flat", padx=20, pady=6,
@@ -856,6 +871,41 @@ class WorldMapMixin:
             f"📦 Trade Route established with {country}. $500K/day for 15 days.")
         self._add_ticker(
             f"MARKETS: {self.username} expands commercial ties with {country}.")
+        self.update_status()
+        popup.destroy()
+        self._render_map(ax)
+        canvas.draw()
+
+    def _bribe_leader(self, country, popup):
+        cost = 25_000_000
+        if self.money < cost:
+            self.log_event("Not enough funds to bribe the leader ($25M required).")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        self.public_opinion = min(100, self.public_opinion + 5)
+        self.transgressions = max(0, self.transgressions - 10)
+        self.log_event(f"💰 Bribed the leader of {country}. +5 public opinion, −10 transgressions.")
+        self._add_ticker(f"POLITICS: {self.username} deepens ties with {country} leadership.")
+        self.update_status()
+        popup.destroy()
+
+    def _setup_country_factory(self, country, popup, ax, canvas):
+        cost = 20_000_000
+        if self.money < cost:
+            self.log_event("Not enough funds to set up a factory ($20M required).")
+            return
+        self.money -= cost
+        self.market.money = self.money
+        self.oil_operations.append({
+            "country":   country,
+            "income":    1_000_000,
+            "days_left": 20,
+            "resource":  "Factory",
+            "action":    "Factory",
+        })
+        self.log_event(f"🏭 Factory established in {country}. $1M/day for 20 days.")
+        self._add_ticker(f"INDUSTRY: {self.username} opens manufacturing plant in {country}.")
         self.update_status()
         popup.destroy()
         self._render_map(ax)

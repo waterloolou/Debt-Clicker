@@ -123,24 +123,6 @@ class CasinoMixin:
                       padx=16, pady=4,
                       command=lambda c=cmd, w=win: [w.destroy(), c()]).pack(pady=(10, 0))
 
-        # Work section
-        tk.Frame(win, bg="#333", height=1).pack(fill="x", padx=20, pady=(16, 8))
-
-        _tier_names = ["Worker", "Executive", "Mogul", "Oligarch"]
-        _tier_ranges = [(10_000, 200_000), (1_000_000, 5_000_000),
-                        (20_000_000, 80_000_000), (150_000_000, 500_000_000)]
-        lvl = self.work_level
-        lo, hi = _tier_ranges[lvl]
-
-        work_row = tk.Frame(win, bg="#0e1117")
-        work_row.pack(pady=4)
-
-        tk.Label(work_row,
-                 text=f"💼  Work  [{_tier_names[lvl]}]  —  ${lo:,.0f}–${hi:,.0f} per click",
-                 font=("Arial", 10), bg="#0e1117", fg="#aaaaaa").pack(side="left", padx=(0, 12))
-        tk.Button(work_row, text="Work", font=("Arial", 10, "bold"),
-                  bg="#00bb44", fg="white", relief="flat", padx=14, pady=5,
-                  command=lambda w=win: [self.work(), w.destroy(), self.open_casino()]).pack(side="left")
 
     # =========================================================
     # RUSSIAN ROULETTE

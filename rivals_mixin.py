@@ -7,14 +7,20 @@ RIVAL_DEFS = [
     {"name": "Elizabeth Harlow",  "money": 80_000_000,  "color": "#9900cc"},
 ]
 
+PRESIDENT_RIVAL_DEFS = [
+    {"name": "Vladimir Putin",  "money": 200_000_000_000, "color": "#cc2222"},
+    {"name": "Xi Jinping",      "money": 150_000_000_000, "color": "#dd4400"},
+]
+
 
 class RivalsMixin:
-    """AI rival billionaires who compete for the same resource countries."""
+    """AI rival billionaires/world leaders who compete against the player."""
 
     def init_rivals(self):
+        defs = PRESIDENT_RIVAL_DEFS if getattr(self, "game_mode", "billionaire") == "president" else RIVAL_DEFS
         self.rivals = {
             r["name"]: {"money": r["money"], "controls": {}, "color": r["color"]}
-            for r in RIVAL_DEFS
+            for r in defs
         }
 
     def process_rivals(self):
@@ -235,10 +241,16 @@ class RivalsMixin:
         win.geometry("520x420")
         win.resizable(False, False)
 
+        is_president = getattr(self, "game_mode", "billionaire") == "president"
         if is_mp:
             tk.Label(win, text="RIVAL PLAYERS",
                      font=("Impact", 22), bg="#0e1117", fg="#1e90ff").pack(pady=(18, 2))
             tk.Label(win, text="Real opponents — live stats from the network.",
+                     font=("Arial", 9), bg="#0e1117", fg="#666").pack(pady=(0, 12))
+        elif is_president:
+            tk.Label(win, text="WORLD LEADERS",
+                     font=("Impact", 22), bg="#0e1117", fg="#cc2222").pack(pady=(18, 2))
+            tk.Label(win, text="The most powerful governments on the planet.",
                      font=("Arial", 9), bg="#0e1117", fg="#666").pack(pady=(0, 12))
         else:
             tk.Label(win, text="RIVAL BILLIONAIRES",

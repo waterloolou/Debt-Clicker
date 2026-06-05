@@ -180,9 +180,8 @@ class FactoryMixin:
         tk.Label(inner, text="BUY A FACTORY", font=("Impact", 14),
                  bg="#0e1117", fg="#888").pack(anchor="w", padx=16, pady=(4, 2))
 
-        owned_ids = {f["type_id"] for f in self.factories}
         for ftype in FACTORY_TYPES:
-            self._build_factory_buy_row(inner, ftype, ftype["id"] in owned_ids, win)
+            self._build_factory_buy_row(inner, ftype, False, win)
 
     def _build_owned_factory_row(self, parent, fac, win):
         ftype   = _FACTORY_BY_ID[fac["type_id"]]
@@ -295,11 +294,12 @@ class FactoryMixin:
         left = tk.Frame(row, bg="#111520")
         left.pack(side="left", fill="both", expand=True)
 
+        owned_count = sum(1 for f in self.factories if f["type_id"] == ftype["id"])
         title_txt = f"{ftype['icon']}  {ftype['name']}"
-        if already_owned:
-            title_txt += "  [OWNED]"
+        if owned_count:
+            title_txt += f"  [×{owned_count}]"
         tk.Label(left, text=title_txt, font=("Arial", 11, "bold"),
-                 bg="#111520", fg=color).pack(anchor="w")
+                 bg="#111520", fg=ftype["color"]).pack(anchor="w")
         tk.Label(left, text=ftype["desc"], font=("Arial", 8),
                  bg="#111520", fg="#666", wraplength=360, justify="left").pack(anchor="w")
 
@@ -336,12 +336,10 @@ class FactoryMixin:
             self.open_factory_window()
 
         tk.Button(row,
-                  text="OWNED" if already_owned else "Buy",
+                  text="Buy",
                   font=("Arial", 10, "bold"),
-                  bg="#333" if already_owned else "#ffaa00",
-                  fg="#555" if already_owned else "black",
+                  bg="#ffaa00", fg="black",
                   relief="flat", padx=14, pady=5,
-                  state="disabled" if already_owned else "normal",
                   command=_buy).pack(side="right")
 
     # =========================================================
