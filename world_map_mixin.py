@@ -1111,6 +1111,7 @@ class WorldMapMixin:
         # Crash the seized resource's market category (supply disruption)
         if resource in RESOURCE_CRASH:
             crash_cats, crash_mult, crash_days = RESOURCE_CRASH[resource]
+            self._insider_front_run(crash_cats)
             self.apply_market_effect(crash_cats, crash_mult, crash_days,
                                      f"Resource seizure: {name} {resource}")
             self.log_event(
@@ -1122,6 +1123,39 @@ class WorldMapMixin:
         popup.destroy()
         self._render_map(ax)
         canvas.draw()
+
+    def _insider_front_run(self, crash_categories):
+        """You know the market is about to crash before anyone else — because you're
+        the one causing it. Automatically dump any owned shares in the affected
+        categories at today's (pre-crash) price. Free money, at a cost."""
+        dumped_value = 0
+        dumped_names = []
+        for stock_name, data in self.market.stocks.items():
+            if data.get("category") not in crash_categories or data.get("shares", 0) <= 0:
+                continue
+            shares = data["shares"]
+            proceeds = shares * data["price"]
+            self.money += proceeds
+            self.market.money = self.money
+            data["shares"] = 0
+            dumped_value += proceeds
+            dumped_names.append(stock_name)
+        if not dumped_names:
+            return
+        self.sec_heat = min(150, getattr(self, "sec_heat", 0) + 15)
+        self.add_transgression(10, 6)
+        self.log_event(
+            f"🕵 INSIDER TRADE: Liquidated {', '.join(dumped_names)} for ${dumped_value:,.0f} "
+            f"hours before the operation went public.")
+        self._add_ticker("MARKETS: Unusual pre-announcement trading volume flagged by regulators...")
+        self.add_message(
+            "🕵️ Insider Trading Flagged",
+            f"You quietly sold your positions in {', '.join(dumped_names)} for "
+            f"${dumped_value:,.0f} right before your own operation crashed those markets.\n\n"
+            f"SEC Heat +15  |  Transgressions +10",
+            category="stocks",
+        )
+        self.update_status()
 
     # =========================================================
     # DAILY RESOURCE INCOME  (called from game.py main_loop)

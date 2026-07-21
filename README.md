@@ -59,10 +59,11 @@ No Python installation required.
 - **Infamy Tiers** — 6 tiers from "Nobody" to "ENDGAME" based on transgression level; title shown next to leaderboard score
 - **Wanted Level** — escalates from Media Attention → Senate Investigation → FBI Target → Interpol Red Notice
 
-### Death Conditions & End Screens
-- **4 ways to die**: Money hits $0, Happiness hits 0, Public Opinion hits 0, Transgressions hits 100
-- **1-day warnings** — each condition gives a bold popup before killing you; fix it or it's over
-- **Themed end screens** — each death cause has its own title, flavour text, icon, and colour scheme
+### Death Conditions, Victory & End Screens
+- **6 ways to die**: Money hits $0, Happiness hits 0, Public Opinion hits 0, Transgressions hits 100, Russian Roulette, or an **Interpol siege** if your Black Market heat maxes out
+- **World Domination win** — survive to Year 100 and the game ends in victory instead of defeat, with a $50M bonus and a permanent "Centurion" career badge
+- **1-day warnings** — each bad condition gives a bold popup before killing you; fix it or it's over
+- **Themed end screens** — each death (or victory) cause has its own title, flavour text, icon, and colour scheme
 
 ### War Room (Multiplayer)
 - **Buy militia** in 4 tiers: Mercenary Squad (15 units, $30M) → Elite Strike Force (120 units, $280M)
@@ -74,11 +75,27 @@ No Python installation required.
 - Jeffrey Epstein texts you an iMessage-style invite; accept for happiness and cash, but risk exposure daily
 - If you **own Little Saint James**, you can invite rivals and frame them — their reputation crashes, yours doesn't
 
+### Presidential Cabinet
+- **4 advisors** — Chief of Staff, Press Secretary, Attorney General, Treasury Secretary — each with a 0–100 approval meter
+- Every Executive Order and Groq power action shifts their approval; tank it and they **resign publicly** (opinion hit, transgressions up), keep it high (85+) and they grant **daily passive bonuses**
+- Vacant seats are refilled automatically after 5 days
+
+### Rival Wars & Alliance Betrayal
+- **4 rival billionaires** (Single Player) / **3 rival world leaders** (President Mode) — rivals now occasionally **feud with each other**, seizing territory and draining each other's wealth without your involvement
+- **Alliance betrayal** — if your Wanted Level hits FBI Target or worse, your ally may cut you loose: frozen assets, a public opinion hit, and 20 days of sanctions from your former friend
+
+### Deeper Markets
+- **Margin Desk** — open leveraged long/short bets (2×–10×) on any stock, settling 3/7/14 days later
+- **Insider front-running** — bombing a resource country now automatically dumps your holdings in the categories about to crash, before the news breaks (at a cost)
+- **SEC Investigation Arc** — pumping, dumping, and outsized leveraged wins build "SEC Heat"; cross the threshold and the SEC freezes your trading account for a week
+
 ### Meta
 - **Legacy System** — survive 10+ days to bank a bonus (up to $50M) that carries into your next run
 - **Net Worth Graph** — matplotlib chart of your money across every day survived
 - **News Ticker** — scrolling headline bar reporting all events, market moves, and rival activity in real time
 - **Wiki** — in-game help page covering every mechanic, accessible from the start screen
+- **Global Leaderboard** — local top-50 plus a shared online leaderboard synced through the multiplayer server
+- **Career Badges** — 8 unlockable achievements (Centurion, Kingpin, Warlord, World Leader, and more) tracked across every run you've ever played, viewable from the start screen
 
 ---
 
@@ -144,8 +161,11 @@ Debt Clicker Python Project/
 ├── rivals_mixin.py          # AI rivals — territory seizure, direct attacks, retaliation
 ├── multiplayer_mixin.py     # Multiplayer lobby, network sync, chat, war declaration
 ├── militia_mixin.py         # War Room — buy militia, deploy attacks, receive attacks
+├── cabinet_mixin.py         # Presidential cabinet — advisors who react to your use of power
+├── career_mixin.py          # Cross-run career stats and unlockable achievement badges
 ├── leaderboard.json         # Auto-created on first play-through
-└── legacy.json              # Auto-created — carries bonus to next run
+├── legacy.json              # Auto-created — carries bonus to next run
+└── career.json              # Auto-created — cross-run career stats and badges
 ```
 
 ---

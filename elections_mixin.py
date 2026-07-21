@@ -431,6 +431,8 @@ class ElectionsMixin:
             self.years_in_office   = TERM_LENGTH
             if not hasattr(self, "executive_orders") or self.executive_orders is None:
                 self.executive_orders = []
+            self._form_cabinet()
+            self.ever_president = True
             flavor_text = (
                 f"The people have spoken. You are now President of {self.country}.\n"
                 f"You have {TERM_LENGTH} years to serve.\n"
@@ -470,6 +472,7 @@ class ElectionsMixin:
         self.is_president    = False
         self.years_in_office = 0
         self.executive_orders = []
+        self.cabinet          = {}
 
         self.log_event(f"Presidential term {term} has expired.")
         self._add_ticker(
@@ -752,6 +755,7 @@ class ElectionsMixin:
                 self.log_event(f"[Groq] {result}")
                 self._add_ticker(f"EXECUTIVE ACTION: {result}")
                 self.add_message("🧠 Groq Executive Action", result, category="groq")
+                self.cabinet_react(action_key)
                 self.update_status()
             except Exception as exc:
                 groq_result_lbl.config(text=str(exc), fg="#ff4444")
@@ -849,6 +853,7 @@ class ElectionsMixin:
 
         # Apply effect immediately — don't wait for the next daily tick
         self._apply_order_immediately(new_order)
+        self.cabinet_react(etype)
 
         status_var.set(f"SIGNED: {reason}  —  All Praise Elon Musk!")
         status_lbl.config(fg="#00ff90")

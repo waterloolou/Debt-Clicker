@@ -451,11 +451,74 @@ class StockWindowMixin:
                       command=_dump_close
                       ).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
+        # ── Margin Desk (leveraged long/short bets) ─────────────
+        tk.Frame(win, bg="#1e2130", height=1).pack(fill="x", padx=20, pady=(12, 8))
+        tk.Label(win, text="Margin Desk — Leveraged Bet",
+                 font=("Arial", 8, "bold"), bg="#0e1117", fg="#2a2a3a").pack(anchor="w", padx=24)
+
+        open_bets = [b for b in getattr(self, "margin_bets", []) if b["stock"] == name]
+        if open_bets:
+            for b in open_bets:
+                tk.Label(win,
+                         text=(f"  {b['leverage']}x {b['direction'].upper()}  ·  "
+                               f"${b['stake']:,.0f} stake  ·  {b['days_left']}d left"),
+                         font=("Arial", 8), bg="#0e1117", fg="#ffaa00").pack(anchor="w", padx=24)
+
+        mg = tk.Frame(win, bg="#0e1117")
+        mg.pack(fill="x", padx=24, pady=(4, 10))
+
+        dir_var = tk.StringVar(value="long")
+        lev_var = tk.StringVar(value="2x")
+        term_var = tk.StringVar(value="7d")
+        stake_var = tk.StringVar(value="1000000")
+
+        row1 = tk.Frame(mg, bg="#0e1117")
+        row1.pack(fill="x", pady=(0, 4))
+        ttk.Combobox(row1, values=["long", "short"], textvariable=dir_var,
+                     state="readonly", width=7).pack(side="left", padx=(0, 4))
+        ttk.Combobox(row1, values=[f"{x}x" for x in self.MARGIN_LEVERAGES], textvariable=lev_var,
+                     state="readonly", width=5).pack(side="left", padx=4)
+        ttk.Combobox(row1, values=[f"{x}d" for x in self.MARGIN_TERMS], textvariable=term_var,
+                     state="readonly", width=5).pack(side="left", padx=4)
+        tk.Entry(row1, textvariable=stake_var, width=12,
+                 bg="#1e2130", fg="white", font=("Arial", 9),
+                 insertbackground="white", relief="flat").pack(side="left", padx=4)
+
+        def _place_bet(w=win):
+            try:
+                stake = float(stake_var.get())
+                lev   = int(lev_var.get().rstrip("x"))
+                term  = int(term_var.get().rstrip("d"))
+            except ValueError:
+                self.log_event("Invalid margin bet parameters.")
+                return
+            if self.place_margin_bet(name, dir_var.get(), stake, lev, term):
+                w.destroy()
+
+        tk.Button(mg, text="Place Leveraged Bet", font=("Arial", 9, "bold"),
+                  bg="#1e3a6e", fg="white", activebackground="#2e4a7e",
+                  relief="flat", padx=10, pady=6, cursor="hand2",
+                  command=_place_bet).pack(fill="x", pady=(4, 0))
+        tk.Label(mg, text="Long profits when price rises, short when it falls. "
+                          "Higher leverage = bigger swings and more SEC scrutiny.",
+                 font=("Arial", 7), bg="#0e1117", fg="#555",
+                 wraplength=460, justify="left").pack(anchor="w", pady=(4, 0))
+
     # =========================================================
     # BUY / SELL / PUMP / DUMP
     # =========================================================
 
+    def _trading_frozen(self):
+        if getattr(self, "trading_frozen_days", 0) > 0:
+            self.log_event(
+                f"Trading frozen — SEC investigation in progress "
+                f"({self.trading_frozen_days} days remaining).")
+            return True
+        return False
+
     def buy_stock(self, name):
+        if self._trading_frozen():
+            return
         result = self.market.buy_stock(name, 1)
         self.money = self.market.money
         self.log_event(result)
@@ -471,6 +534,8 @@ class StockWindowMixin:
 
     def pump_stock(self, name):
         """Spend $5M to artificially inflate a stock you own. Once per stock per year."""
+        if self._trading_frozen():
+            return
         cost = 5_000_000
         pumped_this_year = getattr(self, "_pumped_this_year", {})
         if pumped_this_year.get(name) == self.days:
@@ -490,13 +555,16 @@ class StockWindowMixin:
         cat = data.get("category", "Custom")
         self.apply_market_effect([cat], 1.12, 3, f"Pump: {name}")
         self.add_transgression(8, 5)
-        self.log_event(f"PUMP: Inflated {name} by 25%. Cost ${cost:,}. Transgression +8.")
+        self.sec_heat = min(150, getattr(self, "sec_heat", 0) + 10)
+        self.log_event(f"PUMP: Inflated {name} by 25%. Cost ${cost:,}. Transgression +8. SEC Heat +10.")
         self._add_ticker(f"MARKETS: Unusual volume spike detected in {name}...")
         self.update_status()
         self.refresh_market()
 
     def dump_stock(self, name):
         """Sell all shares at 1.5x price, then crash the stock."""
+        if self._trading_frozen():
+            return
         data = self.market.stocks[name]
         shares = data["shares"]
         if shares <= 0:
@@ -511,10 +579,125 @@ class StockWindowMixin:
         cat = data.get("category", "Custom")
         self.apply_market_effect([cat], 0.85, 4, f"Dump: {name}")
         self.add_transgression(12, 8)
-        self.log_event(f"DUMP: Sold {shares} shares of {name} for ${proceeds:,} (1.5x). Stock crashed.")
+        self.sec_heat = min(150, getattr(self, "sec_heat", 0) + 12)
+        self.log_event(f"DUMP: Sold {shares} shares of {name} for ${proceeds:,} (1.5x). Stock crashed. SEC Heat +12.")
         self._add_ticker(f"MARKETS: {name} in freefall — mass selloff detected...")
         self.update_status()
         self.refresh_market()
+
+    # =========================================================
+    # LEVERAGED MARGIN BETS  (long/short wagers settled after N days)
+    # =========================================================
+
+    MARGIN_LEVERAGES = [2, 5, 10]
+    MARGIN_TERMS     = [3, 7, 14]
+
+    def place_margin_bet(self, name, direction, stake, leverage, term_days):
+        if self._trading_frozen():
+            return False
+        if stake <= 0 or self.money < stake:
+            self.log_event(f"Need ${stake:,.0f} to open that margin position.")
+            return False
+        data = self.market.stocks.get(name)
+        if not data:
+            return False
+        self.money -= stake
+        self.market.money = self.money
+        if not hasattr(self, "margin_bets") or self.margin_bets is None:
+            self.margin_bets = []
+        self.margin_bets.append({
+            "stock": name, "direction": direction, "stake": stake,
+            "leverage": leverage, "entry_price": data["price"],
+            "days_left": term_days, "term": term_days,
+        })
+        if leverage >= 5:
+            self.add_transgression(2, 0)
+            self.sec_heat = min(150, getattr(self, "sec_heat", 0) + 3)
+        self.log_event(
+            f"MARGIN: Opened {leverage}x {direction.upper()} on {name} — "
+            f"${stake:,.0f} stake, settles in {term_days} days.")
+        self._add_ticker(f"MARKETS: Leveraged position opened on {name}...")
+        self.update_status()
+        return True
+
+    def process_margin_bets(self):
+        """Settle any margin bets whose term has expired. Called once per game day."""
+        if not getattr(self, "margin_bets", None):
+            return
+        remaining = []
+        for bet in self.margin_bets:
+            bet["days_left"] -= 1
+            if bet["days_left"] > 0:
+                remaining.append(bet)
+                continue
+            data = self.market.stocks.get(bet["stock"])
+            price_now = data["price"] if data else bet["entry_price"]
+            pct_change = (price_now - bet["entry_price"]) / bet["entry_price"] if bet["entry_price"] else 0
+            if bet["direction"] == "short":
+                pct_change = -pct_change
+            payout_mult = max(0.0, min(5.0, 1 + pct_change * bet["leverage"]))
+            payout = bet["stake"] * payout_mult
+            self.money += payout
+            self.market.money = self.money
+            profit = payout - bet["stake"]
+            verb = "profited" if profit >= 0 else "lost"
+            self.log_event(
+                f"MARGIN SETTLED: {bet['leverage']}x {bet['direction'].upper()} on {bet['stock']} "
+                f"{verb} ${abs(profit):,.0f} (payout ${payout:,.0f}).")
+            if payout >= bet["stake"] * 2:
+                self.sec_heat = min(150, getattr(self, "sec_heat", 0) + 5)
+                self._add_ticker(f"MARKETS: Regulators note an unusually well-timed bet on {bet['stock']}...")
+        self.margin_bets = remaining
+        self.update_status()
+
+    # =========================================================
+    # SEC INVESTIGATION ARC  (called once per game day from main_loop)
+    # =========================================================
+
+    def process_sec_heat(self):
+        heat = getattr(self, "sec_heat", 0)
+        frozen = getattr(self, "trading_frozen_days", 0)
+
+        if frozen > 0:
+            self.trading_frozen_days -= 1
+            if self.trading_frozen_days <= 0:
+                self.log_event("SEC investigation concluded — trading privileges restored.")
+                self._add_ticker("MARKETS: Trading freeze lifted — markets reopen for you...")
+
+        # Slow daily decay when not actively manipulating markets
+        self.sec_heat = max(0, heat - 2)
+
+        if heat >= 100:
+            fine = int(self.money * 0.15)
+            self.money -= fine
+            self.market.money = self.money
+            self.add_transgression(20, 15)
+            self.trading_frozen_days = 7
+            self.sec_heat = 40
+            self.warned_sec_heat = False
+            self.log_event(
+                f"🚨 SEC FORMAL CHARGES: Market manipulation case filed. "
+                f"Fined ${fine:,} (15% of net worth). Trading frozen 7 days.")
+            self._add_ticker("BREAKING: SEC files formal market manipulation charges...")
+            self.add_message(
+                "🚨 SEC Formal Investigation",
+                f"The SEC has filed formal charges over your trading activity.\n\n"
+                f"Fine: ${fine:,}\nTransgressions +20\nTrading frozen for 7 days.",
+                category="stocks",
+            )
+        elif heat >= 60 and not getattr(self, "warned_sec_heat", False):
+            self.warned_sec_heat = True
+            self.log_event("⚠ SEC Compliance: Your trading pattern has triggered an internal inquiry.")
+            self._add_ticker("MARKETS: SEC opens preliminary inquiry into unusual trading activity...")
+            self.add_message(
+                "⚠️ SEC Preliminary Inquiry",
+                "Regulators have flagged your recent trading pattern for review.\n\n"
+                "Cool off on pumps, dumps, and leveraged bets — "
+                "further activity risks a formal investigation and a full trading freeze.",
+                category="stocks",
+            )
+        elif heat < 60:
+            self.warned_sec_heat = False
 
     def show_stock_graph(self, stock):
         self._open_detail(stock)

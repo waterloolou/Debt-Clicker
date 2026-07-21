@@ -22,6 +22,45 @@ BLACK_MARKET_ITEMS = [
 class BlackMarketMixin:
     """Black market — fast money at severe moral cost."""
 
+    # =========================================================
+    # INTERPOL SIEGE ARC  (called once per game day from main_loop)
+    # =========================================================
+
+    def process_black_market_heat(self):
+        heat = getattr(self, "bm_heat", 0)
+        self.bm_heat = max(0, heat - 8)   # slow daily cooldown
+
+        if heat < 100:
+            self.warned_bm_heat = False
+            return
+
+        if getattr(self, "warned_bm_heat", False):
+            # Second consecutive day at 100+ heat with no intervention — siege happens
+            self.running = False
+            self.death_cause = "interpol_siege"
+            self.log_event("INTERPOL and federal SWAT teams breach your compound. Game over.")
+            self._add_ticker("BREAKING: Multinational raid ends the reign of "
+                              f"{getattr(self, 'username', 'the fugitive')}...")
+            self.root.after(1500, self._show_end_screen)
+            return
+
+        self.warned_bm_heat = True
+        self.log_event("🚨 INTERPOL RED NOTICE issued — your black market network has been traced.")
+        self._add_ticker("BREAKING: Interpol issues Red Notice — raid believed imminent...")
+        self.add_message(
+            "🚨 Interpol Red Notice",
+            "Your black market activity has drawn international law enforcement attention.\n\n"
+            "A multinational task force is closing in. Stop dealing immediately or "
+            "the siege happens tomorrow — there is no more warning after this.",
+            category="legal",
+        )
+        self._critical_warning(
+            "🚨  Interpol Red Notice",
+            "Your black market network has been traced by international law enforcement.",
+            "Stop all black market activity immediately\nor a raid ends your empire tomorrow.",
+            "#ff2222",
+        )
+
     def open_black_market(self):
         win = tk.Toplevel(self.root)
         win.title("Black Market")
@@ -109,6 +148,7 @@ class BlackMarketMixin:
             if not hasattr(self, "_bm_cooldowns"):
                 self._bm_cooldowns = {}
             self._bm_cooldowns[it["id"]] = 4
+            self.bm_heat = min(150, getattr(self, "bm_heat", 0) + 25)
             self.update_status()
             self.log_event(f"Black market: {it['name']} completed. Available again in 4 days.")
             self._add_ticker("RUMOUR: Underground deal traced to offshore account...")

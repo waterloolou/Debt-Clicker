@@ -27,9 +27,11 @@ from pleasures_mixin import PleasuresMixin
 from elections_mixin import ElectionsMixin
 from messages_mixin import MessagesMixin
 from groq_integration import GroqOrdersEngine
+from cabinet_mixin import CabinetMixin
+from career_mixin import CareerMixin
 
 
-class DebtClicker(MessagesMixin, ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin, PleasuresMixin, ElectionsMixin):
+class DebtClicker(MessagesMixin, ScreensMixin, EventsMixin, CasinoMixin, StockWindowMixin, AssetsMixin, WorldMapMixin, IslandMapMixin, LobbyMixin, BlackMarketMixin, DebtMixin, RivalsMixin, MultiplayerMixin, MilitiaMixin, TutorialMixin, FactoryMixin, SaveMixin, PleasuresMixin, ElectionsMixin, CabinetMixin, CareerMixin):
     """Main game controller — inherits all feature mixins."""
 
     def __init__(self, root):
@@ -192,6 +194,15 @@ class DebtClicker(MessagesMixin, ScreensMixin, EventsMixin, CasinoMixin, StockWi
         self.groq_propaganda_days  = 0
         self.groq_emergency_days   = 0
         self.groq_censorship_days  = 0
+        self.cabinet             = {}
+        self.margin_bets         = []
+        self.sec_heat            = 0
+        self.warned_sec_heat     = False
+        self.trading_frozen_days = 0
+        self.bm_heat             = 0
+        self.warned_bm_heat      = False
+        self.won_game            = False
+        self.ever_president      = False
         from world_map_mixin import RESOURCE_DATA
         self.groq_known_places = sorted({
             c for rd in RESOURCE_DATA.values() for c in rd["countries"]
@@ -357,6 +368,11 @@ class DebtClicker(MessagesMixin, ScreensMixin, EventsMixin, CasinoMixin, StockWi
         self._tick_bm_cooldowns()
         self.process_presidential_term()
         self.apply_executive_order_effects()
+        self.process_cabinet()
+        self.process_margin_bets()
+        self.process_sec_heat()
+        self.process_black_market_heat()
+        self.check_win_condition()
         self.check_critical_stats()
         if not self.running:
             return
@@ -450,6 +466,33 @@ class DebtClicker(MessagesMixin, ScreensMixin, EventsMixin, CasinoMixin, StockWi
     # =========================================================
     # CRITICAL STAT CHECKS  (happiness / opinion / transgressions)
     # =========================================================
+
+    # =========================================================
+    # WIN CONDITION  (Day 100 — World Domination)
+    # =========================================================
+
+    def check_win_condition(self):
+        if not self.running or getattr(self, "won_game", False):
+            return
+        if self.days < 100:
+            return
+        self.won_game  = True
+        self.running   = False
+        self.death_cause = "world_domination_win"
+        bonus = 50_000_000
+        self.money += bonus
+        self.market.money = self.money
+        self.log_event(
+            f"👑 CENTURY MARK REACHED — 100 years of unchecked power. "
+            f"Victory bonus +${bonus:,}.")
+        self._add_ticker(f"HISTORY: {self.username} completes a century of dominance — a legend is born...")
+        self.add_message(
+            "👑 World Domination Achieved",
+            f"You have survived and thrived for 100 years.\n\n"
+            f"Victory bonus: +${bonus:,}\n\nNo one has ever done this before. No one ever will again.",
+            category="event",
+        )
+        self.root.after(1500, self._show_end_screen)
 
     def check_critical_stats(self):
         # ── Happiness ────────────────────────────────────────────────────
@@ -677,6 +720,14 @@ class DebtClicker(MessagesMixin, ScreensMixin, EventsMixin, CasinoMixin, StockWi
         data     = self._ALLIANCE_DATA[self.alliance]
         tier     = data["tiers"][tier_idx]
 
+        # Betrayal risk: allies get cold feet the more of a liability you become.
+        # Only kicks in once your wanted level is serious (3+ = FBI Target or worse).
+        if self.wanted_level >= 3:
+            betrayal_chance = 0.04 * (self.wanted_level - 2)  # 4% at lvl3, 8% at lvl4
+            if random.random() < betrayal_chance:
+                self._alliance_betrayal()
+                return
+
         # Apply daily perks
         if self.alliance == "USA":
             bonus = 2_000_000 if tier_idx == 1 else 750_000
@@ -705,6 +756,35 @@ class DebtClicker(MessagesMixin, ScreensMixin, EventsMixin, CasinoMixin, StockWi
             self.log_event(f"Alliance with {self.alliance} ({tier['label']}) has expired.")
             self.alliance      = None
             self.alliance_tier = 0
+
+    def _alliance_betrayal(self):
+        """Ally cuts you loose because you've become too much of a liability."""
+        ally  = self.alliance
+        color = self._ALLIANCE_DATA[ally]["color"]
+        seized = int(self.money * random.uniform(0.05, 0.12))
+        self.money -= seized
+        self.market.money = self.money
+        self.public_opinion = max(0, self.public_opinion - 15)
+        self.alliance      = None
+        self.alliance_tier = 0
+        self.alliance_days = 0
+        self.apply_sanction(ally, days=20)
+        self.log_event(
+            f"BETRAYAL: {ally} severed the alliance and froze ${seized:,} in joint assets. "
+            f"You've become too radioactive to associate with.")
+        self._add_ticker(f"DIPLOMACY: {ally} publicly cuts ties with {self.username}...")
+        self.add_message(
+            f"💔 Alliance Betrayed: {ally}",
+            f"{ally} has terminated the alliance, citing your escalating notoriety.\n\n"
+            f"Frozen assets: ${seized:,}\nPublic Opinion: -15\n"
+            f"{ally} has also imposed 20 days of sanctions on you.",
+            category="rival",
+        )
+        self._show_rival_attack_popup(
+            ally, color, "Alliance Betrayed",
+            f"{ally} has cut you loose — you're too much of a liability now.\n\n"
+            f"Lost ${seized:,} in frozen assets.\nSanctioned for 20 days.")
+        self.update_status()
 
     def get_alliance_discount(self, country):
         """Return cost multiplier based on current alliance."""

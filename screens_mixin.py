@@ -221,6 +221,12 @@ class ScreensMixin:
                   padx=20, pady=5,
                   command=self.open_tutorial).pack(side="left", padx=8)
 
+        tk.Button(bottom_row, text="🏅 Career",
+                  font=("Arial", 10), bg="#3a3410", fg="#ffd700",
+                  activebackground="#4a4420", relief="flat",
+                  padx=20, pady=5,
+                  command=self.open_career_window).pack(side="left", padx=8)
+
         return frame
 
     # =========================================================
@@ -521,6 +527,7 @@ class ScreensMixin:
         ]
         if getattr(self, "game_mode", "billionaire") != "billionaire":
             _sec_btns.insert(2, ("Debt", self.open_debt_window))
+            _sec_btns.insert(3, ("🏛 Cabinet", self.open_cabinet_window))
         if getattr(self, "is_multiplayer", False):
             _sec_btns += [
                 ("💬 Chat",     self.open_chat_window),
@@ -623,6 +630,16 @@ class ScreensMixin:
             "You pulled the trigger.\nOne bullet. That was the one.",
             "#ff2222", "🔫",
         ),
+        "interpol_siege": (
+            "INTERPOL\nSIEGE",
+            "The black market network you built finally gave you up.\nA multinational task force ended it in under six minutes.",
+            "#ff2222", "🚨",
+        ),
+        "world_domination_win": (
+            "WORLD\nDOMINATION",
+            "A century of scandal, conquest, and unimaginable wealth.\nHistory will remember you — whether it wants to or not.",
+            "#ffd700", "👑",
+        ),
     }
 
     def _build_end_screen(self):
@@ -712,6 +729,7 @@ class ScreensMixin:
         self._save_legacy()
         rank, total = self._save_score()
         self._submit_global_score()
+        new_badges = self._record_career_run()
 
         cause = getattr(self, "death_cause", "broke")
         title, flavor, color, icon = self._END_THEMES.get(cause, self._END_THEMES["broke"])
@@ -741,6 +759,8 @@ class ScreensMixin:
             self.end_rank_label.config(text="")
 
         self.show_screen("end")
+        if new_badges:
+            self.root.after(600, lambda: self._show_badge_popup(new_badges))
 
     def _play_again(self):
         # Disconnect from any active multiplayer session

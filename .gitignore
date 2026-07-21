@@ -10,6 +10,8 @@ __pycache__/
 # Runtime-generated game files (created fresh each run)
 leaderboard.json
 legacy.json
+career.json
+save_slot_*.json
 
 # OS
 .DS_Store

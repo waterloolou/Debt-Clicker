@@ -5,11 +5,13 @@ RIVAL_DEFS = [
     {"name": "Viktor Drago",      "money": 95_000_000,  "color": "#cc0044"},
     {"name": "Chen Wei",          "money": 120_000_000, "color": "#cc6600"},
     {"name": "Elizabeth Harlow",  "money": 80_000_000,  "color": "#9900cc"},
+    {"name": "Kenji Tanaka",      "money": 105_000_000, "color": "#00aacc"},
 ]
 
 PRESIDENT_RIVAL_DEFS = [
     {"name": "Vladimir Putin",  "money": 200_000_000_000, "color": "#cc2222"},
     {"name": "Xi Jinping",      "money": 150_000_000_000, "color": "#dd4400"},
+    {"name": "General Marcus Okafor", "money": 90_000_000_000, "color": "#996600"},
 ]
 
 
@@ -64,6 +66,36 @@ class RivalsMixin:
             for res in list(rival["controls"].keys()):
                 to_release = {c for c in rival["controls"][res] if random.random() < 0.01}
                 rival["controls"][res] -= to_release
+
+        self._process_rival_wars()
+
+    def _process_rival_wars(self):
+        """Rivals occasionally feud with each other — territory and wealth change hands
+        without any player involvement. Purely flavour + world-state churn."""
+        names = list(self.rivals.keys())
+        if len(names) < 2 or random.random() >= 0.12:
+            return
+        attacker_name, defender_name = random.sample(names, 2)
+        attacker, defender = self.rivals[attacker_name], self.rivals[defender_name]
+
+        # Find something the defender controls that the attacker can seize
+        contested = [(res, c) for res, ctries in defender["controls"].items() for c in ctries]
+        if contested and random.random() < 0.6:
+            resource, country = random.choice(contested)
+            defender["controls"][resource].discard(country)
+            attacker["controls"].setdefault(resource, set()).add(country)
+            loss = min(defender["money"], defender["money"] * random.uniform(0.03, 0.10))
+            defender["money"] -= loss
+            attacker["money"] += loss * 0.5
+            self.log_event(f"RIVAL WAR: {attacker_name} seized {country} ({resource}) from {defender_name}!")
+            self._add_ticker(f"CONFLICT: {attacker_name} and {defender_name} clash over {country}...")
+        else:
+            # No territory to fight over — just a costly feud (lawsuits, sabotage, PR wars)
+            drain = min(defender["money"], defender["money"] * random.uniform(0.02, 0.06))
+            defender["money"] -= drain
+            attacker["money"] -= drain * 0.3
+            self.log_event(f"RIVAL WAR: {attacker_name} and {defender_name} are locked in a costly feud.")
+            self._add_ticker(f"MARKETS: Analysts note rising hostility between {attacker_name} and {defender_name}...")
 
     def _rival_attack_player(self, name, rival):
         """A rival launches a targeted action against the player."""
