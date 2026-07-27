@@ -207,7 +207,8 @@ def _validate_text(text: str) -> Optional[str]:
     low = text.lower()
     for pattern in FORBIDDEN_PATTERNS:
         if re.search(pattern, low):
-            return f"Forbidden phrase detected: {pattern.strip('\\b')}"
+            clean_pattern = pattern.strip("\\b")
+            return f"Forbidden phrase detected: {clean_pattern}"
     if len(text) > 250:
         return "Instruction is too long; keep it concise."
     return None

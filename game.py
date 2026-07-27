@@ -5,6 +5,9 @@ import threading
 import math
 import yfinance as yf
 
+import ui_theme
+ui_theme.install()
+
 from constants import STOCK_CATEGORIES, CATEGORY_PRICE_RANGES
 from market import StockMarket
 from screens_mixin import ScreensMixin

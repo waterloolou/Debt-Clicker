@@ -4,6 +4,8 @@ import json
 import random
 
 from constants import LEADERBOARD_FILE, GLOBAL_LB_URL, STOCK_CATEGORIES, CATEGORY_PRICE_RANGES
+from ui_widgets import IconButton, RoundedMeter
+from ui_icons import draw_icon
 
 PLAYABLE_COUNTRIES = sorted([
     # Superpowers
@@ -41,6 +43,41 @@ class ScreensMixin:
         self.screens["leaderboard"] = self._build_leaderboard_screen()
 
     def show_screen(self, name):
+        """Swap the visible screen with a quick crossfade of the whole window.
+        Falls back to an instant swap on platforms without window alpha support."""
+        self._screen_fade_gen = getattr(self, "_screen_fade_gen", 0) + 1
+        gen = self._screen_fade_gen
+        steps, interval = 5, 12
+
+        if not getattr(self, "_alpha_supported", True):
+            self._swap_screen(name)
+            return
+
+        def fade(i, direction):
+            if gen != self._screen_fade_gen:
+                return   # a newer transition took over — abandon this one
+            try:
+                self.root.attributes("-alpha", i / steps)
+            except tk.TclError:
+                self._alpha_supported = False
+                try:
+                    self.root.attributes("-alpha", 1.0)
+                except tk.TclError:
+                    pass
+                self._swap_screen(name)
+                return
+            if direction == "out" and i <= 0:
+                self._swap_screen(name)
+                self.root.after(interval, lambda: fade(1, "in"))
+                return
+            if direction == "in" and i >= steps:
+                return
+            nxt = i - 1 if direction == "out" else i + 1
+            self.root.after(interval, lambda: fade(nxt, direction))
+
+        fade(steps, "out")
+
+    def _swap_screen(self, name):
         for frame in self.screens.values():
             frame.place_forget()
         self.screens[name].place(relx=0, rely=0, relwidth=1, relheight=1)
@@ -475,7 +512,14 @@ class ScreensMixin:
         top = tk.Frame(frame, bg="#0e1117")
         top.pack(fill="x", padx=20, pady=(16, 6))
 
-        self.money_label = tk.Label(top, text="Money: $100,000,000",
+        money_wrap = tk.Frame(top, bg="#0e1117")
+        money_wrap.pack(side="left")
+        self._money_icon = tk.Canvas(money_wrap, width=26, height=26,
+                                     bg="#0e1117", highlightthickness=0)
+        self._money_icon.pack(side="left", padx=(0, 6))
+        draw_icon(self._money_icon, "money", 13, 13, 10, "#00ff90")
+
+        self.money_label = tk.Label(money_wrap, text="$100,000,000",
                                     font=self._font_money, bg="#0e1117", fg="#00ff90")
         self.money_label.pack(side="left")
 
@@ -498,19 +542,18 @@ class ScreensMixin:
         btn_frame = tk.Frame(frame, bg="#0e1117")
         btn_frame.pack(pady=(0, 4))
 
-        for text, cmd in [
-            ("Casino",       self.open_casino),
-            ("Stock Market", self.open_stock_market),
-            ("Assets",       self.open_assets),
-            ("🎭 Pleasures", self.open_pleasures),
-            ("World Map",    self.open_world_map),
-            ("🏭 Factory",   self.open_factory_window),
+        for text, icon, cmd in [
+            ("Casino",       "dice",    self.open_casino),
+            ("Stock Market", "chart",   self.open_stock_market),
+            ("Assets",       "money",   self.open_assets),
+            ("Pleasures",    "star",    self.open_pleasures),
+            ("World Map",    "globe",   self.open_world_map),
+            ("Factory",      "factory", self.open_factory_window),
         ]:
-            tk.Button(btn_frame, text=text,
-                      font=self._font_btn_pri, bg="#1e2130", fg="white",
-                      activebackground="#2e3140", relief="flat",
-                      padx=18, pady=7,
-                      command=cmd).pack(side="left", padx=6)
+            IconButton(btn_frame, text=text, icon=icon, command=cmd,
+                       bg="#1e2130", fg="white", width=150, height=42,
+                       font=("Arial", 10, "bold"), parent_bg="#0e1117"
+                       ).pack(side="left", padx=6)
 
         # ── Secondary action buttons ────────────────────────────
         btn_frame2 = tk.Frame(frame, bg="#0e1117")
@@ -544,28 +587,15 @@ class ScreensMixin:
         bars_frame = tk.Frame(frame, bg="#0e1117")
         bars_frame.pack(fill="x", padx=16, pady=(0, 4))
 
-        def _make_bar(parent, label, init_val, color):
-            col = tk.Frame(parent, bg="#0e1117")
-            col.pack(side="left", expand=True, fill="x", padx=6)
-
-            hdr = tk.Frame(col, bg="#0e1117")
-            hdr.pack(fill="x")
-            tk.Label(hdr, text=label, font=self._font_stat,
-                     bg="#0e1117", fg="#888").pack(side="left")
-            val_lbl = tk.Label(hdr, text=str(init_val),
-                               font=self._font_stat, bg="#0e1117", fg=color)
-            val_lbl.pack(side="right")
-
-            track = tk.Frame(col, bg="#1a1a2e", height=14)
-            track.pack(fill="x")
-            track.pack_propagate(False)
-            fill = tk.Frame(track, bg=color, height=14)
-            fill.place(relx=0, rely=0, relheight=1, relwidth=max(0.001, init_val / 100))
-            return fill, val_lbl
-
-        self._bar_happy_fill,   self._bar_happy_lbl   = _make_bar(bars_frame, "Happiness",       50, "#00ff90")
-        self._bar_opinion_fill, self._bar_opinion_lbl = _make_bar(bars_frame, "Public Opinion",   75, "#4499ff")
-        self._bar_trans_fill,   self._bar_trans_lbl   = _make_bar(bars_frame, "Transgressions",    0, "#ff9900")
+        self._meter_happy = RoundedMeter(bars_frame, "Happiness", "heart", 50, "#00ff90",
+                                         parent_bg="#0e1117")
+        self._meter_happy.pack(side="left", expand=True, fill="x", padx=6)
+        self._meter_opinion = RoundedMeter(bars_frame, "Public Opinion", "flag", 75, "#4499ff",
+                                           parent_bg="#0e1117")
+        self._meter_opinion.pack(side="left", expand=True, fill="x", padx=6)
+        self._meter_trans = RoundedMeter(bars_frame, "Transgressions", "shield", 0, "#ff9900",
+                                         parent_bg="#0e1117")
+        self._meter_trans.pack(side="left", expand=True, fill="x", padx=6)
 
         # ── Infamy + Wanted status line ─────────────────────────
         status2 = tk.Frame(frame, bg="#0e1117")
@@ -929,12 +959,12 @@ class ScreensMixin:
         self.log.config(state="disabled")
 
     def update_status(self):
-        self.money_label.config(text=f"Money: ${int(self.money):,}")
+        self.money_label.config(text=f"${int(self.money):,}")
         self.day_label.config(text=f"Year {self.days}")
         self._update_bars()
 
     def _update_bars(self):
-        if not hasattr(self, "_bar_happy_fill"):
+        if not hasattr(self, "_meter_happy"):
             return
 
         h = getattr(self, "happiness",      50)
@@ -945,25 +975,19 @@ class ScreensMixin:
         if h > 60:   hc = "#00ff90"
         elif h > 30: hc = "#ffaa00"
         else:        hc = "#ff4444"
-        self._bar_happy_fill.place(relwidth=max(0.001, min(1, h / 100)))
-        self._bar_happy_fill.config(bg=hc)
-        self._bar_happy_lbl.config(text=f"{int(h)}%", fg=hc)
+        self._meter_happy.set_value(h, hc)
 
         # Public opinion: blue → yellow → red
         if o > 60:   oc = "#4499ff"
         elif o > 30: oc = "#ffaa00"
         else:        oc = "#ff4444"
-        self._bar_opinion_fill.place(relwidth=max(0.001, min(1, o / 100)))
-        self._bar_opinion_fill.config(bg=oc)
-        self._bar_opinion_lbl.config(text=f"{int(o)}%", fg=oc)
+        self._meter_opinion.set_value(o, oc)
 
         # Transgressions: orange → deep red
         if t > 70:   tc = "#ff2222"
         elif t > 40: tc = "#ff6600"
         else:        tc = "#ff9900"
-        self._bar_trans_fill.place(relwidth=max(0.001, min(1, t / 100)))
-        self._bar_trans_fill.config(bg=tc)
-        self._bar_trans_lbl.config(text=str(int(t)), fg=tc)
+        self._meter_trans.set_value(t, tc)
 
         # Update infamy + wanted labels
         if hasattr(self, "_infamy_label"):

@@ -97,6 +97,12 @@ No Python installation required.
 - **Global Leaderboard** — local top-50 plus a shared online leaderboard synced through the multiplayer server
 - **Career Badges** — 8 unlockable achievements (Centurion, Kingpin, Warlord, World Leader, and more) tracked across every run you've ever played, viewable from the start screen
 
+### Interface
+- **Hover states everywhere** — every button in the game lightens on mouse-over, applied app-wide
+- **Rounded, icon-led buttons** — the primary action row and stat bars are custom Canvas-drawn cards with a small vector icon set (no emoji-font inconsistency)
+- **Fade transitions** — screen switches crossfade and every popup window fades in instead of snapping into view
+- **Central design tokens** (`ui_theme.py`) — colors, fonts, and hover/fade behavior defined once and reused everywhere
+
 ---
 
 ## Requirements
@@ -163,6 +169,9 @@ Debt Clicker Python Project/
 ├── militia_mixin.py         # War Room — buy militia, deploy attacks, receive attacks
 ├── cabinet_mixin.py         # Presidential cabinet — advisors who react to your use of power
 ├── career_mixin.py          # Cross-run career stats and unlockable achievement badges
+├── ui_theme.py              # Design tokens + global hover/fade Tk enhancements
+├── ui_icons.py               # Canvas-drawn vector icon set
+├── ui_widgets.py             # Rounded IconButton / RoundedMeter Canvas components
 ├── leaderboard.json         # Auto-created on first play-through
 ├── legacy.json              # Auto-created — carries bonus to next run
 └── career.json              # Auto-created — cross-run career stats and badges
