@@ -144,6 +144,38 @@ The server runs on port 5555. Players connect via the in-game Multiplayer lobby 
 
 ---
 
+## Mobile Version
+
+The desktop game is built on Tkinter, which doesn't exist on Android or iOS. `mobile/` is a separate, self-contained **Kivy** port covering the same systems: stock market (with margin bets), casino (Roulette/Slots/Blackjack/5-Card Poker), World Map, Islands, Assets, Pleasures, Lobby, Black Market, Debt, Rivals, Factories, Elections + Executive Orders, the Presidential Cabinet, the War Room, career badges, and both local and global leaderboards.
+
+It reuses `constants.py`, `market.py`, `network_client.py`, and `groq_integration.py` directly (the only desktop modules with no Tkinter dependency); everything else — game data, rules, and the game-day tick — lives in `mobile/state.py` and `mobile/game_data.py`, with zero coupling to the desktop UI.
+
+**Design tradeoffs worth knowing about:**
+- The **World Map and Islands are categorized lists** (resource tabs → country rows), not the desktop's interactive matplotlib/geopandas map — those libraries are heavy, slow, and impractical to cross-compile for Android/iOS, and a scrolling list is the standard mobile pattern for this kind of data anyway.
+- **Random events are a curated subset** (~15 of the desktop's 37), covering the same categories (tax fraud, inheritance, betrayal, pandemic, revolution, lawsuits, etc.) rather than a line-for-line port.
+- All emoji/Unicode symbols (🔫💰♠♥♦♣ etc.) were deliberately avoided in favor of plain text — Kivy's bundled font, like most stock Android system fonts, doesn't reliably render them, so relying on them risks silent "tofu box" rendering on a real device.
+
+### Running it on a desktop (for development/testing)
+
+```bash
+pip install -r mobile/requirements.txt
+python -m mobile.main
+```
+
+### Building an Android APK
+
+`mobile/buildozer.spec` is a starter [Buildozer](https://buildozer.readthedocs.io/) config. Buildozer itself requires a Linux host (or WSL) with the Android SDK/NDK toolchain, which it downloads on first run (several GB) — it was not run as part of this change, so treat the spec as a documented starting point, not a verified build:
+
+```bash
+pip install buildozer
+cd mobile
+buildozer android debug
+```
+
+An iOS build uses [kivy-ios](https://github.com/kivy/kivy-ios) instead, which requires a macOS host with Xcode — also untested here.
+
+---
+
 ## Project structure
 
 ```
@@ -174,7 +206,10 @@ Debt Clicker Python Project/
 ├── ui_widgets.py             # Rounded IconButton / RoundedMeter Canvas components
 ├── leaderboard.json         # Auto-created on first play-through
 ├── legacy.json              # Auto-created — carries bonus to next run
-└── career.json              # Auto-created — cross-run career stats and badges
+├── career.json              # Auto-created — cross-run career stats and badges
+└── mobile/                  # Kivy port for Android/iOS — see "Mobile Version" above
+    ├── main.py, state.py, game_data.py, widgets.py
+    └── screens_core.py, screens_economy.py, screens_world.py, screens_political.py, screens_casino.py
 ```
 
 ---

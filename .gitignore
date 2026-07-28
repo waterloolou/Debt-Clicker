@@ -12,6 +12,13 @@ leaderboard.json
 legacy.json
 career.json
 save_slot_*.json
+mobile/career_mobile.json
+mobile/legacy_mobile.json
+mobile/save_mobile.json
+
+# Buildozer output (Android build artifacts)
+mobile/.buildozer/
+mobile/bin/
 
 # OS
 .DS_Store
